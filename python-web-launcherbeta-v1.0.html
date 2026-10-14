@@ -1,0 +1,2823 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>JARVIS IDE + Pyodide + tkinter + Vosk WASM</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+html, body { font-family: 'Consolas', 'Courier New', monospace; background: #1e1e1e; color: #d4d4d4; height: 100%; width: 100%; overflow: hidden; display: flex; flex-direction: column; }
+.menubar { background: #2d2d2d; display: flex; padding: 2px 0; border-bottom: 1px solid #111; font-size: 13px; flex-shrink: 0; z-index: 10; }
+.menubar .menu-item { padding: 4px 12px; cursor: pointer; color: #ccc; }
+.menubar .menu-item:hover { background: #3a3a3a; }
+.dropdown { position: absolute; background: #2d2d2d; border: 1px solid #111; box-shadow: 2px 2px 8px rgba(0,0,0,0.5); display: none; min-width: 240px; z-index: 100; padding: 4px 0; }
+.dropdown.show { display: block; }
+.dropdown div { padding: 6px 20px; cursor: pointer; font-size: 13px; color: #ddd; }
+.dropdown div:hover { background: #094771; }
+.dropdown .sep { height: 1px; background: #444; margin: 4px 0; padding: 0; cursor: default; }
+.toolbar { background: #252526; padding: 4px 8px; display: flex; gap: 4px; border-bottom: 1px solid #111; align-items: center; flex-shrink: 0; flex-wrap: wrap; z-index: 10; }
+.tool-btn { background: #3c3c3c; border: 1px solid #555; color: #ddd; padding: 4px 12px; cursor: pointer; font-size: 12px; border-radius: 3px; }
+.tool-btn:hover { background: #4a4a4a; }
+.tool-btn.run { background: #2d7d2d; border-color: #3a9a3a; }
+.tool-btn.run:hover { background: #3a9a3a; }
+.tool-btn.vosk { background: #6a1b9a; border-color: #8e24aa; }
+.tool-btn.vosk:hover { background: #8e24aa; }
+.tool-btn.stop { background: #b02a37; border-color: #dc3545; display: none; }
+.tool-btn.stop.show { display: inline-block; }
+.tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.filetree { width: 280px; background: #252526; border-right: 1px solid #111; display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+.filetree-header { background: #2d2d2d; padding: 6px 10px; font-size: 12px; color: #ccc; border-bottom: 1px solid #111; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.filetree-header button { background: #3c3c3c; border: 1px solid #555; color: #ddd; font-size: 11px; padding: 2px 8px; cursor: pointer; border-radius: 2px; }
+.filetree-header button:hover { background: #4a4a4a; }
+.drop-zone { border: 2px dashed #555; border-radius: 6px; padding: 12px; margin: 10px; text-align: center; color: #888; font-size: 12px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+.drop-zone:hover, .drop-zone.dragover { border-color: #007acc; background: #1a2a3a; color: #4ec9b0; }
+.filetree-body { flex: 1; overflow-y: auto; padding: 4px 0; font-size: 13px; }
+.file-item { padding: 3px 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 18px; }
+.file-item:hover { background: #2a2d2e; }
+.file-item.active { background: #094771; }
+.file-item.folder { color: #dcdcaa; }
+.file-item.py { color: #9cdcfe; }
+.file-item.txt { color: #ce9178; }
+.file-item.json { color: #cbcb41; }
+.file-item.bat { color: #f48771; }
+.file-item.audio { color: #c586c0; }
+.file-item.other { color: #888; }
+.folder-toggle { display: inline-block; width: 12px; font-size: 9px; color: #999; text-align: center; flex-shrink: 0; }
+.folder-children { display: block; }
+.folder-children.collapsed { display: none; }
+.tree-stats { padding: 6px 10px; font-size: 11px; color: #666; border-top: 1px solid #222; background: #222; }
+.editor { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.editor-tabs { background: #2d2d2d; display: flex; border-bottom: 1px solid #111; font-size: 12px; height: 30px; overflow-x: auto; flex-shrink: 0; }
+.editor-tab { padding: 6px 16px; background: #2d2d2d; color: #888; border-right: 1px solid #111; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.editor-tab.active { background: #1e1e1e; color: #fff; }
+.editor-tab .close { color: #888; font-size: 14px; cursor: pointer; }
+.editor-tab .close:hover { color: #f44; }
+.code-area { flex: 1; display: flex; overflow: hidden; background: #1e1e1e; min-height: 0; }
+.line-numbers { background: #1e1e1e; color: #858585; text-align: right; padding: 10px 8px; font-size: 14px; line-height: 1.5; user-select: none; min-width: 50px; border-right: 1px solid #2a2a2a; overflow: hidden; flex-shrink: 0; }
+.code-editor { flex: 1; background: #1e1e1e; color: #d4d4d4; border: none; outline: none; resize: none; padding: 10px; font-size: 14px; line-height: 1.5; font-family: 'Consolas', 'Courier New', monospace; overflow: auto; white-space: pre; tab-size: 4; min-width: 0; }
+.console { height: 240px; background: #000; border-top: 1px solid #111; display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
+.console-header { background: #2d2d2d; padding: 4px 10px; font-size: 12px; color: #ccc; border-bottom: 1px solid #111; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.console-header .actions { display: flex; gap: 8px; align-items: center; }
+.console-header .actions span { cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+.console-header .actions span:hover { background: #3a3a3a; text-decoration: underline; }
+.btn-copy-all { color: #4ec9b0; }
+.btn-copy-sel { color: #dcdcaa; }
+.btn-clear { color: #f48771; }
+.console-body { flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 13px; line-height: 1.5; color: #ccc; white-space: pre-wrap; word-break: break-word; outline: none; font-family: 'Consolas', monospace; }
+.console-body .prompt { color: #569cd6; }
+.console-body .error { color: #f48771; }
+.console-body .success { color: #6a9955; }
+.console-body .info { color: #4ec9b0; }
+.console-body .warn { color: #dcdcaa; }
+.statusbar { background: #007acc; color: #fff; padding: 3px 12px; font-size: 12px; display: flex; justify-content: space-between; flex-shrink: 0; }
+.statusbar .py-status { padding: 0 8px; border-radius: 3px; }
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; z-index: 200; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #2d2d2d; padding: 20px; border-radius: 6px; min-width: 450px; border: 1px solid #444; }
+.modal h3 { color: #fff; margin-bottom: 15px; font-size: 15px; }
+.modal input[type=file] { color: #ccc; margin: 10px 0; width: 100%; background: #1e1e1e; padding: 8px; border: 1px solid #444; border-radius: 3px; }
+.modal-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; }
+.modal button { padding: 6px 16px; border: none; cursor: pointer; border-radius: 3px; font-size: 13px; }
+.modal .cancel { background: #555; color: #fff; }
+.modal .ok { background: #007acc; color: #fff; }
+.progress { color: #4ec9b0; font-size: 12px; margin-top: 10px; display: none; }
+.progress.show { display: block; }
+.copy-toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(100px); background: #2d7d2d; color: #fff; padding: 12px 28px; border-radius: 6px; font-size: 14px; font-family: 'Segoe UI', sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.6); z-index: 2000; opacity: 0; transition: all 0.3s ease; pointer-events: none; border: 1px solid #3a9a3a; }
+.copy-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+.copy-toast.error { background: #b02a37; border-color: #dc3545; }
+#tkroot { position: fixed; inset: 0; pointer-events: none; z-index: 1500; overflow: hidden; }
+.tk-window { position: fixed; background: #d4d0c8; border: 2px outset #fff; box-shadow: 4px 4px 12px rgba(0,0,0,0.5); font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 12px; color: #000; display: flex; flex-direction: column; pointer-events: auto; min-width: 200px; min-height: 100px; resize: both; overflow: hidden; }
+.tk-titlebar { background: linear-gradient(to bottom, #0a246a 0%, #3a6ea5 50%, #0a246a 100%); color: #fff; padding: 3px 4px 3px 8px; display: flex; justify-content: space-between; align-items: center; cursor: move; font-weight: bold; font-size: 12px; user-select: none; min-height: 22px; }
+.tk-titlebar .tk-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-close { background: #d4d0c8; border: 2px outset #fff; color: #000; width: 20px; height: 18px; font-size: 11px; font-weight: bold; cursor: pointer; padding: 0; }
+.tk-close:hover { background: #e8e4dc; }
+.tk-content { flex: 1; overflow: auto; padding: 6px; position: relative; display: flex; flex-direction: column; gap: 2px; }
+.tk-frame { display: block; }
+.tk-label { display: inline-block; padding: 1px 3px; white-space: pre-wrap; font-family: 'Segoe UI', sans-serif; font-size: 12px; color: #000; }
+.tk-button { background: #d4d0c8; border: 2px outset #fff; padding: 3px 10px; font-family: 'Segoe UI', sans-serif; font-size: 12px; color: #000; cursor: pointer; min-width: 60px; min-height: 24px; }
+.tk-button:hover { background: #e0dcd4; }
+.tk-button:active { border-style: inset; }
+.tk-entry { border: 2px inset #808080; background: #fff; padding: 2px 4px; font-family: 'Segoe UI', sans-serif; font-size: 12px; color: #000; min-height: 20px; outline: none; }
+.tk-entry:focus { background: #ffffcc; }
+.tk-text { border: 2px inset #808080; background: #fff; font-family: 'Courier New', monospace; font-size: 12px; color: #000; padding: 3px; resize: none; outline: none; min-height: 60px; }
+.tk-canvas { background: #fff; display: block; border: 1px solid #999; }
+.tk-listbox { border: 2px inset #808080; background: #fff; font-family: 'Segoe UI', sans-serif; font-size: 12px; color: #000; padding: 1px; outline: none; overflow-y: auto; min-height: 60px; }
+.tk-notebook-tabs { display: flex; gap: 2px; border-bottom: 1px solid #888; margin-bottom: 4px; }
+.tk-notebook-tab { padding: 3px 10px; background: #c0bdb5; border: 1px solid #888; border-bottom: none; cursor: pointer; font-size: 11px; }
+.tk-notebook-tab.active { background: #d4d0c8; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="menubar">
+    <div class="menu-item" onclick="toggleMenu('file', event)">File</div>
+    <div class="menu-item" onclick="toggleMenu('edit', event)">Edit</div>
+    <div class="menu-item" onclick="toggleMenu('shell', event)">Shell</div>
+    <div class="menu-item" onclick="toggleMenu('options', event)">Options</div>
+    <div class="menu-item" onclick="toggleMenu('help', event)">Help</div>
+</div>
+
+<div id="menu-file" class="dropdown">
+    <div onclick="newFile()">New File</div>
+    <div onclick="openUpload('file')">Open File...</div>
+    <div onclick="openUpload('zip')">Open ZIP Archive...</div>
+    <div onclick="openUpload('model')">Open Vosk Model ZIP...</div>
+    <div class="sep"></div>
+    <div onclick="saveFile()">Save</div>
+    <div onclick="saveFileAs()">Save As...</div>
+</div>
+<div id="menu-edit" class="dropdown">
+    <div onclick="editorAction('undo')">Undo</div>
+    <div onclick="editorAction('redo')">Redo</div>
+    <div class="sep"></div>
+    <div onclick="editorAction('cut')">Cut</div>
+    <div onclick="editorAction('copy')">Copy</div>
+    <div onclick="editorAction('paste')">Paste</div>
+    <div onclick="editorAction('selectAll')">Select All</div>
+</div>
+<div id="menu-shell" class="dropdown">
+    <div onclick="runCode()">Run Module (F5)</div>
+    <div class="sep"></div>
+    <div onclick="copyConsole()">Copy Output</div>
+    <div onclick="copySelection()">Copy Selection</div>
+    <div class="sep"></div>
+    <div onclick="installPackage()">Install pip package...</div>
+    <div onclick="testVosk()">🎤 Тест Vosk</div>
+    <div onclick="testTTS()">🔊 Тест TTS</div>
+    <div onclick="testSound()">🎵 Тест звука WAV</div>
+    <div onclick="closeAllTkWindows()">Закрыть окна tkinter</div>
+    <div class="sep"></div>
+    <div onclick="restartShell()">Restart Shell</div>
+    <div onclick="clearConsole()">Clear Shell</div>
+</div>
+<div id="menu-options" class="dropdown">
+    <div onclick="toggleTheme()">Toggle Dark/Light</div>
+</div>
+<div id="menu-help" class="dropdown">
+    <div onclick="showAbout()">About</div>
+</div>
+
+<div class="toolbar">
+    <button class="tool-btn" onclick="newFile()">📄 New</button>
+    <button class="tool-btn" onclick="openUpload('file')">📂 Open</button>
+    <button class="tool-btn" onclick="openUpload('zip')">🗜 ZIP</button>
+    <button class="tool-btn vosk" onclick="openUpload('model')">📦 Vosk Model</button>
+    <button class="tool-btn" onclick="saveFile()">💾 Save</button>
+    <span style="flex:1"></span>
+    <button class="tool-btn run" id="runBtn" onclick="runCode()">▶ Run (F5)</button>
+    <button class="tool-btn stop" id="stopBtn" onclick="stopCode()">⏹ Стоп</button>
+    <button class="tool-btn" onclick="testVosk()">🎤 Vosk</button>
+    <button class="tool-btn" onclick="testTTS()">🔊 TTS</button>
+    <button class="tool-btn" onclick="testSound()">🎵 Звук</button>
+    <button class="tool-btn" onclick="closeAllTkWindows()">🪟 Окна</button>
+    <button class="tool-btn" onclick="clearConsole()">🗑 Clear</button>
+</div>
+
+<div class="main">
+    <div class="filetree">
+        <div class="filetree-header">
+            <span>📁 EXPLORER</span>
+            <button onclick="openUpload('zip')">+ ZIP</button>
+        </div>
+        <div class="drop-zone" id="dropZone">
+            Перетащи .zip сюда<br>или нажми
+        </div>
+        <div class="filetree-body" id="fileTree"></div>
+    </div>
+
+    <div class="editor">
+        <div class="editor-tabs" id="tabs">
+            <div class="editor-tab active">
+                main.py <span class="close" onclick="closeTab(this)">×</span>
+            </div>
+        </div>
+        <div class="code-area">
+            <div class="line-numbers" id="lineNumbers"></div>
+            <textarea class="code-editor" id="editor" spellcheck="false">import tkinter as tk
+from tkinter import ttk
+import math
+
+class JarvisApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("J.A.R.V.I.S. 9.2")
+        self.root.geometry("1000x650")
+        self.root.configure(bg="#000814")
+        self.colors = {
+            'bg': '#000814', 'panel': '#001d3d', 'accent': '#003566',
+            'text': '#00d4ff', 'success': '#00ff88', 'warn': '#ffd60a',
+            'error': '#ff4444', 'dim': '#005f99'
+        }
+        self.setup_ui()
+        self.add_log("[СИСТЕМА]: JARVIS 9.2 запущен")
+
+    def setup_ui(self):
+        top = tk.Frame(self.root, bg=self.colors['bg'], height=60)
+        top.pack(fill=tk.X, padx=15, pady=10)
+        tk.Label(top, text="J.A.R.V.I.S. 9.2", bg=self.colors['bg'],
+                 fg=self.colors['text'], font=("Consolas", 24, "bold")).pack(side=tk.LEFT)
+        tk.Button(top, text="НАСТРОЙКИ", bg=self.colors['panel'],
+                  fg=self.colors['text'], font=("Consolas", 10, "bold")).pack(side=tk.RIGHT, padx=5)
+        tk.Button(top, text="ВЫКЛ", bg="#3d0000", fg="#ff6666",
+                  font=("Consolas", 10, "bold"), command=self.root.destroy).pack(side=tk.RIGHT, padx=5)
+
+        main = tk.Frame(self.root, bg=self.colors['bg'])
+        main.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+
+        left = tk.Frame(main, bg=self.colors['bg'], width=420)
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        left.pack_propagate(False)
+
+        tk.Label(left, text="● РЕАКТОР:  ОЖИДАНИЕ", bg=self.colors['bg'],
+                 fg=self.colors['text'], font=("Consolas", 13, "bold")).pack(pady=8)
+
+        self.canvas = tk.Canvas(left, width=400, height=400, bg="#000814",
+                                 highlightthickness=0)
+        self.canvas.pack(pady=10)
+        self.draw_reactor()
+
+        info = tk.Frame(left, bg=self.colors['bg'])
+        info.pack(fill=tk.X, padx=10, pady=10)
+        tk.Label(info, text="● ГОЛОС:  АКТИВЕН", bg=self.colors['bg'],
+                 fg=self.colors['success'], font=("Consolas", 11, "bold")).pack(side=tk.LEFT)
+        tk.Label(info, text="● ИИ:  ВЫКЛ", bg=self.colors['bg'],
+                 fg=self.colors['dim'], font=("Consolas", 11, "bold")).pack(side=tk.RIGHT)
+
+        right = tk.Frame(main, bg=self.colors['bg'])
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+
+        term_header = tk.Frame(right, bg=self.colors['bg'])
+        term_header.pack(fill=tk.X)
+        tk.Label(term_header, text="Терминал", bg=self.colors['bg'],
+                 fg=self.colors['text'], font=("Consolas", 15, "bold")).pack(side=tk.LEFT)
+
+        self.log_text = tk.Text(right, bg="#000814", fg=self.colors['success'],
+                                 font=("Consolas", 10), relief=tk.SUNKEN, bd=2,
+                                 wrap=tk.WORD)
+        self.log_text.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        bottom = tk.Frame(self.root, bg=self.colors['bg'])
+        bottom.pack(fill=tk.X, padx=15, pady=10)
+        tk.Label(bottom, text="Ввод команд:", bg=self.colors['bg'],
+                 fg=self.colors['text'], font=("Consolas", 11, "bold")).pack(side=tk.LEFT)
+        self.command_var = tk.StringVar()
+        self.entry = tk.Entry(bottom, textvariable=self.command_var,
+                               font=("Consolas", 12), bg="#001d3d",
+                               fg=self.colors['text'], insertbackground=self.colors['text'],
+                               relief=tk.SUNKEN, bd=2)
+        self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        self.entry.bind('<Return>', self.on_enter)
+        tk.Button(bottom, text="Отправить", command=self.on_enter,
+                  bg=self.colors['panel'], fg=self.colors['text'],
+                  font=("Consolas", 10, "bold")).pack(side=tk.LEFT)
+
+        status = tk.Frame(self.root, bg=self.colors['panel'], height=30)
+        status.pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Label(status, text="● СИСТЕМА АКТИВНА", bg=self.colors['panel'],
+                 fg=self.colors['success'], font=("Consolas", 10, "bold")).pack(side=tk.LEFT, padx=10)
+
+    def draw_reactor(self):
+        c = self.canvas
+        cx, cy = 200, 200
+        for i in range(36):
+            c.create_arc(cx-180, cy-180, cx+180, cy+180,
+                         start=i * 10, extent=7,
+                         outline=self.colors['text'], width=2, style=tk.ARC)
+        for i in range(12):
+            c.create_arc(cx-140, cy-140, cx+140, cy+140,
+                         start=i * 30, extent=25,
+                         fill=self.colors['accent'], outline=self.colors['text'],
+                         width=2, style=tk.PIESLICE)
+        c.create_oval(cx-90, cy-90, cx+90, cy+90,
+                      fill="#0066cc", outline=self.colors['text'], width=2)
+        c.create_oval(cx-45, cy-45, cx+45, cy+45,
+                      fill="#000814", outline=self.colors['text'], width=3)
+        c.create_oval(cx-15, cy-15, cx+15, cy+15,
+                      fill=self.colors['text'], outline="")
+
+    def on_enter(self, event=None):
+        cmd = self.command_var.get().strip()
+        if not cmd: return
+        self.add_log(f"[ПОЛЬЗОВАТЕЛЬ]: {cmd}")
+        self.command_var.set("")
+        self.process_command(cmd)
+
+    def process_command(self, cmd):
+        c = cmd.lower()
+        if c == "помощь":
+            self.add_log("[СИСТЕМА]: Команды: помощь, выход, привет")
+        elif c == "выход":
+            self.root.destroy()
+        elif "привет" in c:
+            self.add_log("[JARVIS]: Приветствую, сэр!")
+            try:
+                import js
+                js.speakText("Приветствую, сэр")
+            except: pass
+        else:
+            self.add_log(f"[СИСТЕМА]: '{cmd}' не распознана")
+
+    def add_log(self, msg):
+        if hasattr(self, 'log_text'):
+            self.log_text.insert(tk.END, msg + "\n")
+            self.log_text.see(tk.END)
+
+root = tk.Tk()
+app = JarvisApp(root)
+root.mainloop()</textarea>
+        </div>
+    </div>
+</div>
+
+<div class="console">
+    <div class="console-header">
+        <span>Python Shell (Pyodide + tkinter + Vosk WASM)</span>
+        <div class="actions">
+            <span class="btn-copy-all" onclick="copyConsole()">📋 Копировать</span>
+            <span class="btn-copy-sel" onclick="copySelection()">✂ Выделенное</span>
+            <span class="btn-clear" onclick="clearConsole()">✕ Очистить</span>
+        </div>
+    </div>
+    <div class="console-body" id="consoleBody" tabindex="0">
+        <span class="prompt">Загрузка Python (Pyodide)...</span>
+    </div>
+</div>
+
+<div class="statusbar">
+    <span id="statusText">Ln 1, Col 1</span>
+    <span class="py-status" id="pyStatus">🐍 Python загружается...</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <h3 id="modalTitle">Открыть</h3>
+        <input type="file" id="fileInput">
+        <div class="progress" id="progress"></div>
+        <div class="modal-buttons">
+            <button class="cancel" onclick="closeModal()">Отмена</button>
+            <button class="ok" onclick="confirmUpload()">Загрузить</button>
+        </div>
+    </div>
+</div>
+
+<div id="tkroot"></div>
+
+<script>
+var pyodide = null, pyodideReady = false, isRunning = false;
+var currentFile = { name: 'main.py', path: null, dir: '/project' };
+
+// ============ АУДИО ============
+var audioUnlocked = false, audioCtx = null;
+function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        var buf = audioCtx.createBuffer(1, 1, 22050);
+        var src = audioCtx.createBufferSource();
+        src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
+    } catch(e) {}
+}
+document.addEventListener('click', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
+
+window.playWavBase64 = function(b64) {
+    try {
+        var a = new Audio("data:audio/wav;base64," + b64);
+        a.volume = 1.0;
+        var p = a.play();
+        if (p && p.catch) p.catch(function(e) {});
+    } catch(e) {}
+};
+window.playBeep = function(freq, dur) {
+    try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        var ctx = audioCtx || new AC();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.value = 0.15;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        setTimeout(function() { try { osc.stop(); } catch(e) {} }, dur);
+    } catch(e) {}
+};
+
+// ============ VOSK WASM ============
+var voskModel = null;
+var voskModelUrl = null;
+var voskRec = null;
+var voskMicStream = null;
+var voskAudioCtx = null;
+var voskProcessor = null;
+var voskCallback = null;
+var voskFallback = null;
+var voskCallbacksFallback = [];
+var voskRecognitionFallback = null;
+
+async function loadScript(url) {
+    if (document.querySelector('script[src="' + url + '"]')) return;
+    return new Promise(function(res, rej) {
+        var s = document.createElement('script');
+        s.src = url;
+        s.onload = res;
+        s.onerror = function() { rej(new Error('Не загрузился: ' + url)); };
+        document.head.appendChild(s);
+    });
+}
+
+async function loadVoskBrowser() {
+    if (typeof Vosk !== 'undefined') return;
+    log('📦 Загрузка vosk-browser...', 'info');
+    await loadScript('https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js');
+}
+async function loadPako() {
+    if (typeof pako !== 'undefined') return;
+    log('📦 Загрузка pako...', 'info');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js');
+}
+
+// Собрать tar-архив из файлов
+function buildTar(entries) {
+    function wr(buf, off, str, len) {
+        for (var i = 0; i < len; i++) buf[off+i] = i < str.length ? str.charCodeAt(i) : 0;
+    }
+    var blocks = [];
+    for (var k = 0; k < entries.length; k++) {
+        var e = entries[k];
+        var size = e.data.length;
+        var h = new Uint8Array(512);
+        wr(h, 0, e.name, 100);
+        wr(h, 100, '0000644', 8);
+        wr(h, 108, '0000000', 8);
+        wr(h, 116, '0000000', 8);
+        wr(h, 124, size.toString(8).padStart(11, '0') + '\0', 12);
+        wr(h, 136, Math.floor(Date.now()/1000).toString(8).padStart(11, '0') + '\0', 12);
+        wr(h, 148, '        ', 8);
+        h[156] = 48;
+        wr(h, 257, 'ustar', 5);
+        h[262] = 0;
+        wr(h, 263, '00', 2);
+        var sum = 0;
+        for (var i = 0; i < 512; i++) sum += h[i];
+        wr(h, 148, sum.toString(8).padStart(6, '0') + '\0 ', 8);
+        blocks.push(h);
+        blocks.push(e.data);
+        var pad = (512 - (size % 512)) % 512;
+        if (pad > 0) blocks.push(new Uint8Array(pad));
+    }
+    blocks.push(new Uint8Array(1024));
+    var total = 0;
+    for (var b of blocks) total += b.length;
+    var out = new Uint8Array(total);
+    var pos = 0;
+    for (var b of blocks) { out.set(b, pos); pos += b.length; }
+    return out;
+}
+
+async function loadVoskModelFromZip(zipFile) {
+    var pg = document.getElementById('progress');
+    pg.classList.add('show');
+    try {
+        pg.textContent = '⏳ Загрузка библиотек...';
+        await loadJSZip();
+        await loadPako();
+        await loadVoskBrowser();
+
+        pg.textContent = '⏳ Чтение ZIP (' + (zipFile.size/1024/1024).toFixed(1) + ' МБ)...';
+        var zipBuf = await new Promise(function(res, rej) {
+            var r = new FileReader();
+            r.onload = function(e) { res(e.target.result); };
+            r.onerror = function() { rej(new Error('read error')); };
+            r.readAsArrayBuffer(zipFile);
+        });
+
+        pg.textContent = '⏳ Распаковка...';
+        var zip = await JSZip.loadAsync(zipBuf);
+
+        pg.textContent = '⏳ Сборка tar.gz...';
+        var entries = [];
+        var promises = [];
+        zip.forEach(function(path, entry) {
+            if (!entry.dir) {
+                promises.push(entry.async('uint8array').then(function(data) {
+                    var parts = path.split('/').filter(function(p) { return p; });
+                    if (parts.length > 1) {
+                        entries.push({ name: parts.slice(1).join('/'), data: data });
+                    } else {
+                        entries.push({ name: path, data: data });
+                    }
+                }));
+            }
+        });
+        await Promise.all(promises);
+        log('📦 Файлов модели: ' + entries.length, 'info');
+
+        var tarBytes = buildTar(entries);
+        var gz = pako.gzip(tarBytes);
+        log('📦 tar.gz: ' + (gz.length/1024/1024).toFixed(1) + ' МБ', 'info');
+
+        var blob = new Blob([gz], { type: 'application/gzip' });
+        if (voskModelUrl) URL.revokeObjectURL(voskModelUrl);
+        voskModelUrl = URL.createObjectURL(blob);
+
+        pg.textContent = '⏳ Загрузка модели в Vosk WASM...';
+        log('📦 Инициализация Vosk...', 'info');
+        voskModel = await Vosk.createModel(voskModelUrl);
+        log('✅ Vosk модель загружена!', 'success');
+        showToast('Vosk модель загружена');
+        pg.textContent = '✅ Готово!';
+        setTimeout(closeModal, 500);
+    } catch (e) {
+        console.error(e);
+        log('❌ Ошибка загрузки Vosk модели: ' + e.message, 'error');
+        pg.textContent = '❌ ' + e.message;
+    }
+}
+
+async function startVoskMic(callback) {
+    if (!voskModel) { return false; }
+    voskCallback = callback;
+    try {
+        voskMicStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 }
+        });
+    } catch (e) {
+        log('❌ Доступ к микрофону запрещён: ' + e.message, 'error');
+        return false;
+    }
+    voskAudioCtx = new AudioContext({ sampleRate: 48000 });
+    var source = voskAudioCtx.createMediaStreamSource(voskMicStream);
+    voskRec = new voskModel.KaldiRecognizer(voskAudioCtx.sampleRate);
+    voskRec.setWords(false);
+
+    voskRec.on('result', function(msg) {
+        try {
+            var text = msg && msg.result && msg.result.text ? msg.result.text : '';
+            if (text) {
+                log('[VOSK] ✓ ' + text, 'success');
+                if (voskCallback) {
+                    try { voskCallback(text); } catch(e) {}
+                }
+            }
+        } catch(e) {}
+    });
+    voskRec.on('partialresult', function(msg) {
+        try {
+            var p = msg && msg.result && msg.result.partial ? msg.result.partial : '';
+            if (p) log('[VOSK] ... ' + p, 'info');
+        } catch(e) {}
+    });
+
+    voskProcessor = voskAudioCtx.createScriptProcessor(4096, 1, 1);
+    voskProcessor.onaudioprocess = function(e) {
+        if (!voskRec) return;
+        try { voskRec.acceptWaveform(e.inputBuffer); } catch(err) {}
+    };
+    source.connect(voskProcessor);
+    voskProcessor.connect(voskAudioCtx.destination);
+    log('🎤 Vosk-WASM слушает микрофон...', 'success');
+    showToast('Vosk слушает (WASM)');
+    return true;
+}
+
+function stopVoskMic() {
+    if (voskProcessor) { try { voskProcessor.disconnect(); } catch(e) {} voskProcessor = null; }
+    if (voskAudioCtx) { try { voskAudioCtx.close(); } catch(e) {} voskAudioCtx = null; }
+    if (voskMicStream) {
+        voskMicStream.getTracks().forEach(function(t) { try { t.stop(); } catch(e) {} });
+        voskMicStream = null;
+    }
+    if (voskRec) {
+        try { voskRec.retrieveFinalResult(); } catch(e) {}
+        voskRec = null;
+    }
+}
+
+// Fallback — Web Speech API
+function fallbackWebSpeech(callback) {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { log('[VOSK] Web Speech API недоступен', 'error'); return; }
+    if (!voskRecognitionFallback) {
+        voskRecognitionFallback = new SR();
+        voskRecognitionFallback.lang = 'ru-RU';
+        voskRecognitionFallback.continuous = false;
+        voskRecognitionFallback.interimResults = false;
+    }
+    voskCallbacksFallback.push(callback);
+    voskRecognitionFallback.onresult = function(event) {
+        var final = '';
+        for (var i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) final += event.results[i][0].transcript;
+        }
+        if (final) {
+            log('[VOSK-WebSpeech] ' + final, 'success');
+            for (var k = 0; k < voskCallbacksFallback.length; k++) {
+                try { voskCallbacksFallback[k](final); } catch(e) {}
+            }
+        }
+    };
+    voskRecognitionFallback.onerror = function(event) {
+        log('[VOSK-WebSpeech] Ошибка: ' + event.error, 'error');
+    };
+    try { voskRecognitionFallback.start(); }
+    catch(e) { log('[VOSK] ' + e.message, 'error'); }
+}
+
+window.startVoskRecognition = function(callback) {
+    if (voskModel) {
+        log('🎤 Использую Vosk WASM (реальное распознавание)', 'success');
+        startVoskMic(callback);
+    } else {
+        log('⚠ Vosk модель не загружена, fallback на Web Speech API', 'warn');
+        log('  Загрузите модель через кнопку "📦 Vosk Model"', 'warn');
+        fallbackWebSpeech(callback);
+    }
+};
+
+window.stopVoskRecognition = function() {
+    if (voskModel) stopVoskMic();
+    if (voskRecognitionFallback) {
+        try { voskRecognitionFallback.stop(); } catch(e) {}
+    }
+};
+
+// ============ TTS ============
+window.speakText = function(text) {
+    if (!('speechSynthesis' in window)) return;
+    try { window.speechSynthesis.cancel(); } catch(e) {}
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ru-RU'; u.rate = 1.0; u.pitch = 0.9;
+    var voices = window.speechSynthesis.getVoices();
+    for (var i = 0; i < voices.length; i++) {
+        if (voices[i].lang.indexOf('ru') === 0) { u.voice = voices[i]; break; }
+    }
+    window.speechSynthesis.speak(u);
+};
+
+function testVosk() {
+    log('=== Тест Vosk ===', 'info');
+    window.startVoskRecognition(function(text) {
+        log('Вы сказали: ' + text, 'success');
+    });
+}
+function testTTS() {
+    log('=== Тест TTS ===', 'info');
+    window.speakText('Привет, я Джарвис');
+}
+function testSound() {
+    log('=== Тест звука ===', 'info');
+    unlockAudio();
+    if (pyodideReady) {
+        pyodide.runPythonAsync(`
+try:
+    import winsound
+    winsound.Beep(440, 200)
+    winsound.Beep(660, 200)
+    winsound.Beep(880, 300)
+    print("[winsound] 3 пика 440/660/880 Гц")
+except Exception as e:
+    print("[sound] error:", e)
+`);
+    }
+}
+function closeAllTkWindows() {
+    document.getElementById('tkroot').innerHTML = '';
+    showToast('Окна tkinter закрыты');
+}
+
+// ============ КОНСОЛЬ ============
+var consoleBody = document.getElementById('consoleBody');
+function log(text, cls) {
+    var s = document.createElement('span');
+    s.className = cls || ''; s.textContent = text + '\n';
+    consoleBody.appendChild(s); consoleBody.scrollTop = consoleBody.scrollHeight;
+}
+function logRaw(text, cls) {
+    var s = document.createElement('span');
+    s.className = cls || ''; s.textContent = text;
+    consoleBody.appendChild(s); consoleBody.scrollTop = consoleBody.scrollHeight;
+}
+function clearConsole() { consoleBody.innerHTML = ''; showToast('Очищено'); }
+function showToast(msg, isError) {
+    var o = document.querySelector('.copy-toast'); if (o) o.remove();
+    var t = document.createElement('div');
+    t.className = 'copy-toast' + (isError ? ' error' : '');
+    t.textContent = msg; document.body.appendChild(t);
+    setTimeout(function() { t.classList.add('show'); }, 10);
+    setTimeout(function() { t.classList.remove('show'); setTimeout(function() { t.remove(); }, 300); }, 2200);
+}
+function copyConsole() {
+    var text = consoleBody.innerText;
+    if (!text.trim()) { showToast('Пусто', true); return; }
+    copyToClipboard(text, 'Скопировано (' + text.length + ')');
+}
+function copySelection() {
+    var s = window.getSelection(); var t = s ? s.toString() : '';
+    if (!t.trim()) { showToast('Ничего не выделено'); copyConsole(); return; }
+    copyToClipboard(t, 'Скопировано (' + t.length + ')');
+}
+function copyToClipboard(text, msg) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() { showToast(msg); }).catch(function() { fallbackCopy(text, msg); });
+    } else fallbackCopy(text, msg);
+}
+function fallbackCopy(text, msg) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy') ? showToast(msg) : showToast('Ошибка', true); }
+    catch (e) { showToast('Ошибка: ' + e.message, true); }
+    document.body.removeChild(ta);
+}
+consoleBody.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) { e.preventDefault(); copyConsole(); }
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        var r = document.createRange(); r.selectNodeContents(consoleBody);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+});
+
+// ============ PYODIDE ============
+async function initPyodide() {
+    if (pyodideReady) return;
+    log('Загрузка Pyodide...', 'info');
+    try {
+        if (typeof loadPyodide === 'undefined') {
+            var sc = document.createElement('script');
+            sc.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js';
+            document.head.appendChild(sc);
+            await new Promise(function(res, rej) {
+                sc.onload = res;
+                sc.onerror = function() { rej(new Error('Pyodide не загрузился')); };
+            });
+        }
+        pyodide = await loadPyodide({
+            stdout: function(m) { logRaw(m + '\n'); },
+            stderr: function(m) { logRaw(m + '\n', 'error'); }
+        });
+        pyodide.FS.mkdirTree('/project');
+        await pyodide.runPythonAsync(document.getElementById('pyinit').textContent);
+        pyodideReady = true;
+        log('✅ Python ' + pyodide.version + ' готов', 'success');
+        log('   tkinter + Vosk-WASM + TTS активны', 'success');
+        document.getElementById('pyStatus').textContent = '🐍 Python ' + pyodide.version + ' (Pyodide + tkinter + Vosk)';
+        document.getElementById('pyStatus').style.background = '#0a5a0a';
+    } catch (e) {
+        log('❌ Ошибка: ' + e.message, 'error');
+        document.getElementById('pyStatus').textContent = '❌ Python не загружен';
+        document.getElementById('pyStatus').style.background = '#8a1a1a';
+    }
+}
+
+// ============ МЕНЮ ============
+var currentMenu = null;
+function toggleMenu(name, event) {
+    event.stopPropagation();
+    var m = document.getElementById('menu-' + name);
+    if (currentMenu === m) { m.classList.remove('show'); currentMenu = null; return; }
+    if (currentMenu) currentMenu.classList.remove('show');
+    m.style.left = event.target.offsetLeft + 'px'; m.style.top = '28px';
+    m.classList.add('show'); currentMenu = m;
+}
+document.addEventListener('click', function() {
+    if (currentMenu) { currentMenu.classList.remove('show'); currentMenu = null; }
+});
+
+// ============ РЕДАКТОР ============
+var editor = document.getElementById('editor');
+var lineNumbers = document.getElementById('lineNumbers');
+function updateLineNumbers() {
+    var n = editor.value.split('\n').length, h = '';
+    for (var i = 1; i <= Math.max(n, 10); i++) h += i + '<br>';
+    lineNumbers.innerHTML = h;
+}
+editor.addEventListener('input', updateLineNumbers);
+editor.addEventListener('scroll', function() { lineNumbers.scrollTop = editor.scrollTop; });
+editor.addEventListener('keyup', updateStatus);
+editor.addEventListener('click', updateStatus);
+function updateStatus() {
+    var pos = editor.selectionStart;
+    var t = editor.value.substring(0, pos).split('\n');
+    document.getElementById('statusText').textContent = 'Ln ' + t.length + ', Col ' + (t[t.length-1].length + 1);
+}
+editor.addEventListener('keydown', function(e) {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        var s = editor.selectionStart;
+        editor.value = editor.value.substring(0, s) + '    ' + editor.value.substring(editor.selectionEnd);
+        editor.selectionStart = editor.selectionEnd = s + 4;
+        updateLineNumbers();
+    }
+    if (e.key === 'F5') { e.preventDefault(); runCode(); }
+});
+
+// ============ ЗАПУСК ============
+async function runCode() {
+    unlockAudio();
+    if (!pyodideReady) { log('⏳ Python ещё грузится...', 'warn'); return; }
+    if (isRunning) { log('⚠ Уже выполняется', 'warn'); return; }
+    if (currentFile.path && !currentFile.path.endsWith('.py')) {
+        log('⚠ Только .py файлы можно запускать', 'warn'); return;
+    }
+    isRunning = true;
+    var rb = document.getElementById('runBtn');
+    var sb = document.getElementById('stopBtn');
+    rb.disabled = true; rb.textContent = '⏳ Работает...';
+    sb.classList.add('show');
+    log('', ''); log('=== Запуск ' + (currentFile.path || currentFile.name) + ' ===', 'success');
+    var t0 = Date.now();
+    try {
+        if (currentFile.path) {
+            pyodide.FS.writeFile(currentFile.path, editor.value);
+            pyodide.globals.set('_fname', currentFile.path);
+            pyodide.globals.set('_fdir', currentFile.dir || '/project');
+            pyodide.globals.set('_sysargv', [currentFile.name]);
+            await pyodide.runPythonAsync(`
+import sys, os, runpy
+os.chdir(_fdir)
+sys.argv = list(_sysargv)
+if _fdir not in sys.path: sys.path.insert(0, _fdir)
+try: runpy.run_path(_fname, run_name='__main__')
+except SystemExit: pass
+except KeyboardInterrupt: print("\\n[Прервано]", file=sys.stderr)
+`);
+        } else {
+            await pyodide.runPythonAsync(editor.value);
+        }
+    } catch (err) {
+        log(String(err.message || err), 'error');
+    } finally {
+        var el = ((Date.now() - t0) / 1000).toFixed(2);
+        log('=== Завершено за ' + el + ' сек ===', 'success');
+        isRunning = false; rb.disabled = false; rb.textContent = '▶ Run (F5)';
+        sb.classList.remove('show');
+    }
+}
+function stopCode() {
+    stopVoskMic();
+    showToast('Стоп', true);
+}
+async function installPackage() {
+    if (!pyodideReady) { showToast('Python не готов', true); return; }
+    var p = prompt('Имя pip-пакета:'); if (!p) return;
+    log('📦 Установка ' + p + '...', 'info');
+    try {
+        await pyodide.loadPackage('micropip');
+        await pyodide.runPythonAsync("import micropip\nawait micropip.install('" + p.replace(/'/g, "\\'") + "')");
+        log('✅ ' + p + ' установлен', 'success');
+    } catch (e) { log('❌ ' + e.message, 'error'); }
+}
+
+// ============ ФАЙЛЫ ============
+function newFile() {
+    editor.value = ''; currentFile = { name: 'untitled.py', path: null, dir: '/project' };
+    updateLineNumbers(); addTab('untitled.py');
+}
+function addTab(name) {
+    var tabs = document.getElementById('tabs');
+    var all = tabs.querySelectorAll('.editor-tab');
+    for (var k = 0; k < all.length; k++) all[k].classList.remove('active');
+    for (var i = 0; i < all.length; i++) {
+        if (all[i].textContent.trim().indexOf(name) === 0) { all[i].classList.add('active'); return; }
+    }
+    var tab = document.createElement('div');
+    tab.className = 'editor-tab active';
+    tab.innerHTML = escapeHtml(name) + ' <span class="close" onclick="closeTab(this)">×</span>';
+    tabs.appendChild(tab);
+}
+function closeTab(el) {
+    var tab = el.parentElement;
+    var was = tab.classList.contains('active');
+    tab.remove();
+    if (was) { var n = document.querySelector('.editor-tab'); if (n) n.classList.add('active'); }
+}
+function saveFile() {
+    var b = new Blob([editor.value], { type: 'text/plain' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = currentFile.name; a.click();
+    log('Сохранено: ' + currentFile.name, 'success');
+}
+function saveFileAs() {
+    var n = prompt('Имя:', currentFile.name); if (!n) return;
+    var b = new Blob([editor.value], { type: 'text/plain' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = n; a.click();
+    log('Сохранено: ' + n, 'success');
+}
+
+// ============ ZIP ============
+var jszipP = null;
+function loadJSZip() {
+    if (typeof JSZip !== 'undefined') return Promise.resolve();
+    if (jszipP) return jszipP;
+    jszipP = new Promise(function(res, rej) {
+        var cdns = [
+            'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+            'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'
+        ];
+        var i = 0;
+        (function next() {
+            if (i >= cdns.length) { jszipP = null; return rej(new Error('JSZip не загрузился')); }
+            var s = document.createElement('script');
+            s.src = cdns[i++]; s.onload = res; s.onerror = next;
+            document.head.appendChild(s);
+        })();
+    });
+    return jszipP;
+}
+
+async function handleZipUpload(zf) {
+    var pg = document.getElementById('progress');
+    var tr = document.getElementById('fileTree');
+    pg.classList.add('show'); pg.textContent = '⏳ JSZip...';
+    try {
+        await loadJSZip();
+        pg.textContent = '⏳ Чтение...';
+        var buf = await new Promise(function(res, rej) {
+            var r = new FileReader();
+            r.onload = function(e) { res(e.target.result); };
+            r.onerror = function() { rej(new Error('Ошибка')); };
+            r.readAsArrayBuffer(zf);
+        });
+        pg.textContent = '⏳ Распаковка...';
+        var zip = await JSZip.loadAsync(buf);
+        pg.textContent = '⏳ Python...';
+        await initPyodide();
+        pg.textContent = '⏳ ФС...';
+        try { pyodide.FS.rmdir('/project'); } catch(e) {}
+        pyodide.FS.mkdirTree('/project');
+        var allFiles = [], promises = [];
+        zip.forEach(function(path, entry) {
+            if (entry.dir) { try { pyodide.FS.mkdirTree('/project/' + path); } catch(e) {} }
+            else {
+                allFiles.push({ path: path, entry: entry });
+                promises.push(entry.async('uint8array').then(function(data) {
+                    var fp = '/project/' + path;
+                    var dp = fp.substring(0, fp.lastIndexOf('/'));
+                    try { pyodide.FS.mkdirTree(dp); } catch(e) {}
+                    pyodide.FS.writeFile(fp, data);
+                }));
+            }
+        });
+        await Promise.all(promises);
+        log('В ФС: ' + allFiles.length + ' файлов', 'success');
+        pg.textContent = '⏳ Дерево...';
+        tr.innerHTML = '';
+        var root = { children: {}, files: [] };
+        allFiles.forEach(function(f) {
+            var parts = f.path.split('/').filter(function(p) { return p; });
+            var node = root;
+            for (var i = 0; i < parts.length - 1; i++) {
+                var n = parts[i];
+                if (!node.children[n]) node.children[n] = { children: {}, files: [] };
+                node = node.children[n];
+            }
+            node.files.push({ name: parts[parts.length - 1], path: f.path });
+        });
+        var fileMap = {}, idc = 0, h = [];
+        function render(n, d) {
+            var ind = 4 + d * 14;
+            var names = Object.keys(n.children).sort();
+            names.forEach(function(nm) {
+                var ch = n.children[nm], fid = 'd' + (idc++);
+                h.push('<div class="file-item folder" data-folder-id="' + fid + '" style="padding-left:' + ind + 'px"><span class="folder-toggle">▼</span>' + escapeHtml(nm) + '</div>');
+                h.push('<div class="folder-children" data-parent="' + fid + '">');
+                render(ch, d + 1);
+                h.push('</div>');
+            });
+            n.files.sort(function(a,b) { return a.name.localeCompare(b.name); });
+            n.files.forEach(function(f) {
+                var fid = 'f' + (idc++); fileMap[fid] = f;
+                h.push('<div class="file-item ' + getFileClass(f.name) + '" data-file-id="' + fid + '" style="padding-left:' + ind + 'px"><span style="width:12px"></span>' + escapeHtml(f.name) + '</div>');
+            });
+        }
+        render(root, 0);
+        tr.innerHTML = h.join('');
+        tr.onclick = async function(e) {
+            var fol = e.target.closest('[data-folder-id]');
+            if (fol) {
+                var id = fol.dataset.folderId;
+                var ch = tr.querySelector('[data-parent="' + id + '"]');
+                if (ch) {
+                    ch.classList.toggle('collapsed');
+                    var t = fol.querySelector('.folder-toggle');
+                    if (t) t.textContent = ch.classList.contains('collapsed') ? '▶' : '▼';
+                }
+                return;
+            }
+            var it = e.target.closest('[data-file-id]');
+            if (!it) return;
+            var f = fileMap[it.dataset.fileId]; if (!f) return;
+            try {
+                pg.classList.add('show'); pg.textContent = 'Открываю ' + f.name + '...';
+                var isBin = /\.(wav|mp3|ogg|flac|png|jpg|jpeg|gif|ico|exe|dll|zip|tar|gz|pdf|woff|ttf|so|pyc|bin)$/i.test(f.name);
+                if (isBin) {
+                    var sz = 0; try { sz = pyodide.FS.stat('/project/' + f.path).size; } catch(e) {}
+                    editor.value = '// Бинарный файл: ' + f.name + ' (' + sz + ' байт)';
+                    currentFile = { name: f.name, path: '/project/' + f.path, dir: '/project' };
+                } else {
+                    editor.value = pyodide.FS.readFile('/project/' + f.path, { encoding: 'utf8' });
+                    var ls = f.path.lastIndexOf('/');
+                    currentFile = { name: f.name, path: '/project/' + f.path, dir: ls > 0 ? '/project/' + f.path.substring(0, ls) : '/project' };
+                }
+                updateLineNumbers(); addTab(f.name); log('Открыт: ' + f.path);
+                var items = tr.querySelectorAll('.file-item');
+                for (var k = 0; k < items.length; k++) items[k].classList.remove('active');
+                it.classList.add('active');
+                pg.classList.remove('show');
+            } catch (err) { pg.textContent = '❌ ' + err.message; log('Ошибка: ' + err.message, 'error'); }
+        };
+        var fc = tr.querySelectorAll('[data-folder-id]').length;
+        var st = document.createElement('div');
+        st.className = 'tree-stats';
+        st.textContent = '📊 ' + allFiles.length + ' файлов · ' + fc + ' папок';
+        tr.appendChild(st);
+        log('ZIP загружен: ' + allFiles.length + ' файлов', 'success');
+        pg.textContent = '✅ Готово!';
+        showToast('ZIP: ' + allFiles.length + ' файлов');
+        setTimeout(closeModal, 500);
+    } catch (err) {
+        console.error(err); pg.textContent = '❌ ' + err.message;
+        log('ОШИБКА ZIP: ' + err.message, 'error');
+    }
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function getFileClass(n) {
+    if (n.endsWith('.py')) return 'py';
+    if (n.endsWith('.txt') || n.endsWith('.md')) return 'txt';
+    if (n.endsWith('.json')) return 'json';
+    if (n.endsWith('.bat') || n.endsWith('.sh') || n.endsWith('.cmd')) return 'bat';
+    if (/\.(wav|mp3|ogg|flac|m4a)$/i.test(n)) return 'audio';
+    return 'other';
+}
+
+var uploadMode = 'file';
+function openUpload(mode) {
+    uploadMode = mode;
+    var inp = document.getElementById('fileInput');
+    if (mode === 'zip') {
+        inp.setAttribute('accept', '.zip,application/zip');
+        inp.removeAttribute('multiple');
+        document.getElementById('modalTitle').textContent = 'Открыть ZIP';
+    } else if (mode === 'model') {
+        inp.setAttribute('accept', '.zip,application/zip');
+        inp.removeAttribute('multiple');
+        document.getElementById('modalTitle').textContent = 'Открыть Vosk Model ZIP';
+    } else {
+        inp.setAttribute('accept', '.py,.txt,.json,.md,.html,.css,.js,*/*');
+        inp.setAttribute('multiple', '');
+        document.getElementById('modalTitle').textContent = 'Открыть файл';
+    }
+    document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('show');
+    document.getElementById('progress').classList.remove('show');
+    document.getElementById('fileInput').value = '';
+}
+function confirmUpload() {
+    var files = document.getElementById('fileInput').files;
+    if (!files.length) { closeModal(); return; }
+    if (uploadMode === 'model') { loadVoskModelFromZip(files[0]); return; }
+    if (uploadMode === 'zip') handleZipUpload(files[0]);
+    else handleMultipleFiles(files);
+}
+
+async function handleMultipleFiles(files) {
+    await initPyodide();
+    var tr = document.getElementById('fileTree');
+    var fm = {}, h = '';
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i], id = 'f' + i;
+        fm[id] = f;
+        h += '<div class="file-item ' + getFileClass(f.name) + '" data-file-id="' + id + '"><span style="width:12px"></span>' + escapeHtml(f.name) + '</div>';
+    }
+    tr.innerHTML = h;
+    tr.onclick = function(e) {
+        var it = e.target.closest('[data-file-id]');
+        if (!it) return;
+        var file = fm[it.dataset.fileId];
+        if (!file) return;
+        var rd = new FileReader();
+        rd.onload = function(ev) {
+            editor.value = ev.target.result;
+            currentFile = { name: file.name, path: null, dir: '/project' };
+            updateLineNumbers(); addTab(file.name);
+            var items = tr.querySelectorAll('.file-item');
+            for (var k = 0; k < items.length; k++) items[k].classList.remove('active');
+            it.classList.add('active');
+        };
+        rd.readAsText(file);
+    };
+    closeModal();
+}
+
+var dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('click', function() { openUpload('zip'); });
+dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    var files = e.dataTransfer.files;
+    if (!files.length) return;
+    for (var i = 0; i < files.length; i++) {
+        if (files[i].name.endsWith('.zip')) { handleZipUpload(files[i]); return; }
+    }
+    handleMultipleFiles(files);
+});
+
+function editorAction(cmd) { editor.focus(); document.execCommand(cmd); }
+function restartShell() { clearConsole(); log('Python перезапущен', 'success'); }
+function toggleTheme() { document.body.style.filter = document.body.style.filter ? '' : 'invert(1) hue-rotate(180deg)'; }
+function showAbout() {
+    log('Pyodide + tkinter + Vosk-WASM + TTS', 'info');
+    log('Vosk: реальная модель через vosk-browser', 'success');
+    log('Загрузите vosk-model-small-ru-0.22.zip через "📦 Vosk Model"', 'info');
+}
+
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = function() { window.speechSynthesis.getVoices(); };
+}
+
+updateLineNumbers();
+log('========================================', 'info');
+log('  JARVIS IDE + Vosk WASM', 'info');
+log('========================================', 'info');
+log('📦 Реальный Vosk через vosk-browser', 'success');
+log('   Нажми "📦 Vosk Model" и загрузи vosk-model-small-ru-0.22.zip', 'warn');
+log('🎤 Fallback: Web Speech API (требует интернет)', 'info');
+initPyodide();
+</script>
+
+<script type="text/python" id="pyinit">
+import sys, types, builtins, warnings, base64, math, io, os
+from importlib.machinery import ModuleSpec
+from importlib.abc import Loader, MetaPathFinder
+import js
+from pyodide.ffi import create_proxy
+
+for _cat in [SyntaxWarning, DeprecationWarning, UserWarning, ResourceWarning, ImportWarning, RuntimeWarning]:
+    warnings.filterwarnings('ignore', category=_cat)
+
+# THREADING no-op
+import threading as _threading
+def _noop_start(self): self._started.set(); self._is_stopped = False
+def _noop_join(self, timeout=None): return None
+def _noop_run(self): pass
+def _noop_is_alive(self): return False
+_threading.Thread.start = _noop_start
+_threading.Thread.join = _noop_join
+_threading.Thread.is_alive = _noop_is_alive
+_threading.Thread.run = _noop_run
+_threading.Thread.ident = property(lambda self: 1)
+_threading.Thread.native_id = property(lambda self: 1)
+class _FakeTimer(_threading.Thread):
+    def __init__(self, interval, function, args=None, kwargs=None):
+        super().__init__()
+        self.interval = interval; self.function = function
+        self.args = args or (); self.kwargs = kwargs or {}
+    def cancel(self): pass
+_threading.Timer = _FakeTimer
+
+# _Stub
+class _StubMeta(type):
+    def __getattr__(cls, name): return _Stub
+    def __iter__(cls): return iter([])
+    def __call__(cls, *a, **kw): return cls.__new__(cls)
+    def __add__(cls, o): return _Stub()
+    def __radd__(cls, o): return _Stub()
+    def __sub__(cls, o): return _Stub()
+    def __rsub__(cls, o): return _Stub()
+    def __mul__(cls, o): return _Stub()
+    def __rmul__(cls, o): return _Stub()
+    def __truediv__(cls, o): return _Stub()
+    def __rtruediv__(cls, o): return _Stub()
+    def __floordiv__(cls, o): return _Stub()
+    def __rfloordiv__(cls, o): return _Stub()
+    def __mod__(cls, o): return _Stub()
+    def __rmod__(cls, o): return _Stub()
+    def __pow__(cls, o): return _Stub()
+    def __rpow__(cls, o): return _Stub()
+    def __neg__(cls): return _Stub()
+    def __pos__(cls): return _Stub()
+    def __abs__(cls): return _Stub()
+
+class _Stub(metaclass=_StubMeta):
+    def __init__(self, *a, **kw): pass
+    def __new__(cls, *a, **kw): return super().__new__(cls)
+    def __getattr__(self, name):
+        if name == '__mro_entries__': return lambda bases: (_Stub,)
+        if name == '__instancecheck__': return lambda obj: True
+        if name == '__subclasscheck__': return lambda sub: True
+        if name == '__class_getitem__': return lambda item: _Stub
+        if name == '__init_subclass__': return classmethod(lambda cls, **kw: None)
+        if name == '__iter__': return lambda: iter([])
+        if name == '__next__': return lambda: (_ for _ in ()).throw(StopIteration())
+        if name == '__len__': return lambda: 0
+        if name == '__bool__': return lambda: False
+        if name == '__int__': return lambda: 0
+        if name == '__float__': return lambda: 0.0
+        if name == '__index__': return lambda: 0
+        if name == '__str__': return lambda: ''
+        if name == '__repr__': return lambda: '<stub>'
+        if name == '__hash__': return lambda: 0
+        if name == '__eq__': return lambda o: False
+        if name == '__ne__': return lambda o: True
+        if name == '__lt__': return lambda o: False
+        if name == '__gt__': return lambda o: False
+        if name == '__le__': return lambda o: False
+        if name == '__ge__': return lambda o: False
+        if name == '__contains__': return lambda x: False
+        if name == '__getitem__': return lambda k: _Stub()
+        if name == '__setitem__': return lambda k, v: None
+        if name == '__delitem__': return lambda k: None
+        if name == '__call__': return lambda *a, **kw: _Stub()
+        if name == '__enter__': return lambda: self
+        if name == '__exit__': return lambda *a: False
+        if name == '__name__': return 'stub'
+        if name == '__file__': return ''
+        if name == '__path__': return []
+        if name == '__all__': return []
+        if name == '__doc__': return None
+        if name == '__module__': return 'stub'
+        if name == '__qualname__': return 'stub'
+        if name == '__dict__': return {}
+        if name == '__slots__': return ()
+        return _Stub()
+    def __call__(self, *a, **kw): return _Stub()
+    def __iter__(self): return iter([])
+    def __reversed__(self): return iter([])
+    def __next__(self): raise StopIteration()
+    def __len__(self): return 0
+    def __bool__(self): return False
+    def __int__(self): return 0
+    def __float__(self): return 0.0
+    def __complex__(self): return 0j
+    def __index__(self): return 0
+    def __bytes__(self): return b''
+    def __str__(self): return ''
+    def __repr__(self): return '<stub>'
+    def __format__(self, spec): return ''
+    def __hash__(self): return 0
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def __getitem__(self, k): return _Stub()
+    def __setitem__(self, k, v): pass
+    def __delitem__(self, k): pass
+    def __contains__(self, x): return False
+    def __eq__(self, o): return False
+    def __ne__(self, o): return True
+    def __lt__(self, o): return False
+    def __gt__(self, o): return False
+    def __le__(self, o): return False
+    def __ge__(self, o): return False
+    def __add__(self, o): return _Stub()
+    def __radd__(self, o): return _Stub()
+    def __iadd__(self, o): return self
+    def __sub__(self, o): return _Stub()
+    def __rsub__(self, o): return _Stub()
+    def __isub__(self, o): return self
+    def __mul__(self, o): return _Stub()
+    def __rmul__(self, o): return _Stub()
+    def __imul__(self, o): return self
+    def __truediv__(self, o): return _Stub()
+    def __rtruediv__(self, o): return _Stub()
+    def __itruediv__(self, o): return self
+    def __floordiv__(self, o): return _Stub()
+    def __rfloordiv__(self, o): return _Stub()
+    def __ifloordiv__(self, o): return self
+    def __mod__(self, o): return _Stub()
+    def __rmod__(self, o): return _Stub()
+    def __imod__(self, o): return self
+    def __pow__(self, o): return _Stub()
+    def __rpow__(self, o): return _Stub()
+    def __ipow__(self, o): return self
+    def __and__(self, o): return _Stub()
+    def __rand__(self, o): return _Stub()
+    def __iand__(self, o): return self
+    def __or__(self, o): return _Stub()
+    def __ror__(self, o): return _Stub()
+    def __ior__(self, o): return self
+    def __xor__(self, o): return _Stub()
+    def __rxor__(self, o): return _Stub()
+    def __ixor__(self, o): return self
+    def __lshift__(self, o): return _Stub()
+    def __rlshift__(self, o): return _Stub()
+    def __rshift__(self, o): return _Stub()
+    def __rrshift__(self, o): return _Stub()
+    def __neg__(self): return _Stub()
+    def __pos__(self): return _Stub()
+    def __abs__(self): return _Stub()
+    def __invert__(self): return _Stub()
+    def __round__(self, n=0): return 0
+    def __mro_entries__(self, bases): return (_Stub,)
+    def __instancecheck__(self, obj): return True
+    def __subclasscheck__(self, sub): return True
+
+class StubModule(types.ModuleType):
+    def __init__(self, name):
+        super().__init__(name)
+        object.__setattr__(self, '__path__', [])
+        object.__setattr__(self, '__all__', [])
+    def __getattr__(self, name):
+        if name == '__path__': return []
+        if name == '__all__': return []
+        if name == '__name__': return self.__dict__.get('__name__', 'stub')
+        if name == '__file__': return ''
+        return _Stub
+
+# TKINTER
+class _TKBase:
+    _idc = [0]
+    _all = {}
+    def __init__(self, master=None, **kw):
+        _TKBase._idc[0] += 1
+        self._id = 'w%d' % _TKBase._idc[0]
+        _TKBase._all[self._id] = self
+        self.master = master
+        self._el = None
+        self._proxies = []
+        self._created = False
+        self._params = dict(kw)
+        self._widgets = []
+    def _parent_dom(self):
+        if self.master is None:
+            return js.document.getElementById('tkroot')
+        if hasattr(self.master, '_content_dom') and callable(self.master._content_dom):
+            return self.master._content_dom()
+        if hasattr(self.master, '_el') and self.master._el is not None:
+            return self.master._el
+        return js.document.getElementById('tkroot')
+    def _apply_kw(self, kw):
+        if self._el is None: return
+        s = self._el.style
+        bg = kw.get('bg', kw.get('background'))
+        if bg is not None: s.background = str(bg)
+        fg = kw.get('fg', kw.get('foreground'))
+        if fg is not None: s.color = str(fg)
+        if 'width' in kw:
+            w = kw['width']
+            s.width = (str(int(w)) + 'px') if isinstance(w, (int, float)) else str(w)
+        if 'height' in kw:
+            h = kw['height']
+            s.height = (str(int(h)) + 'px') if isinstance(h, (int, float)) else str(h)
+        if 'font' in kw:
+            f = kw['font']
+            if isinstance(f, (tuple, list)):
+                parts = [str(x) for x in f]
+                s.fontFamily = parts[0]
+                if len(parts) > 1:
+                    s.fontSize = (str(parts[1]) + 'px') if str(parts[1]).isdigit() else str(parts[1])
+                if len(parts) > 2: s.fontWeight = parts[2]
+            else: s.fontFamily = str(f)
+        if 'bd' in kw or 'borderwidth' in kw:
+            try:
+                bw = int(kw.get('bd', kw.get('borderwidth', 0)))
+                s.borderWidth = str(bw) + 'px'; s.borderStyle = 'solid'
+            except: pass
+        relief = kw.get('relief')
+        if relief is not None:
+            r = str(relief).lower()
+            if r == 'groove': s.borderStyle = 'groove'
+            elif r == 'ridge': s.borderStyle = 'ridge'
+            elif r == 'sunken': s.borderStyle = 'inset'
+            elif r == 'raised': s.borderStyle = 'outset'
+            elif r == 'flat': s.borderStyle = 'none'
+            elif r == 'solid': s.borderStyle = 'solid'
+        if 'cursor' in kw:
+            c = str(kw['cursor'])
+            if c in ('hand2','hand'): s.cursor = 'pointer'
+            elif c == 'xterm': s.cursor = 'text'
+        if 'anchor' in kw:
+            a = str(kw['anchor']).lower()
+            if a == 'w': s.textAlign = 'left'
+            elif a == 'e': s.textAlign = 'right'
+            elif a == 'center': s.textAlign = 'center'
+        if 'justify' in kw:
+            j = str(kw['justify']).lower()
+            if j == 'left': s.textAlign = 'left'
+            elif j == 'right': s.textAlign = 'right'
+            elif j == 'center': s.textAlign = 'center'
+    def config(self, **kw):
+        self._apply_kw(kw); self._params.update(kw); return self
+    configure = config
+    def cget(self, key): return self._params.get(key, '')
+    def __getitem__(self, k): return self._params.get(k, '')
+    def __setitem__(self, k, v): self.config(**{k: v})
+    def _mount(self):
+        if self._created or self._el is None: return
+        try: self._parent_dom().appendChild(self._el)
+        except: pass
+        self._created = True
+    def pack(self, **kw):
+        self._mount()
+        if self._el is None: return self
+        s = self._el.style; p = self._parent_dom()
+        p.style.display = 'flex'
+        side = kw.get('side', 'top')
+        if side in ('top','bottom'): p.style.flexDirection = 'column'
+        elif side in ('left','right'): p.style.flexDirection = 'row'
+        fill = kw.get('fill')
+        if fill in ('x','both'): s.width = '100%'
+        if fill in ('y','both'): s.height = '100%'
+        if kw.get('expand'): s.flexGrow = '1'
+        if 'padx' in kw:
+            px = kw['padx']
+            if isinstance(px, (tuple, list)):
+                s.marginLeft = str(px[0]) + 'px'; s.marginRight = str(px[1]) + 'px'
+            else: s.marginLeft = s.marginRight = str(px) + 'px'
+        if 'pady' in kw:
+            py = kw['pady']
+            if isinstance(py, (tuple, list)):
+                s.marginTop = str(py[0]) + 'px'; s.marginBottom = str(py[1]) + 'px'
+            else: s.marginTop = s.marginBottom = str(py) + 'px'
+        return self
+    pack_configure = pack
+    def grid(self, **kw):
+        self._mount()
+        if self._el is None: return self
+        s = self._el.style; p = self._parent_dom()
+        p.style.display = 'grid'
+        if 'row' in kw: s.gridRow = str(int(kw['row']) + 1)
+        if 'column' in kw: s.gridColumn = str(int(kw['column']) + 1)
+        if 'rowspan' in kw: s.gridRowEnd = 'span ' + str(kw['rowspan'])
+        if 'columnspan' in kw: s.gridColumnEnd = 'span ' + str(kw['columnspan'])
+        if 'padx' in kw: s.paddingLeft = s.paddingRight = str(kw['padx']) + 'px'
+        if 'pady' in kw: s.paddingTop = s.paddingBottom = str(kw['pady']) + 'px'
+        st = kw.get('sticky', '')
+        if 'n' in st: s.alignSelf = 'start'
+        if 's' in st: s.alignSelf = 'end'
+        if 'e' in st: s.justifySelf = 'end'
+        if 'w' in st: s.justifySelf = 'start'
+        if 'ew' in st or 'we' in st: s.justifySelf = 'stretch'
+        return self
+    grid_configure = grid
+    def place(self, **kw):
+        self._mount()
+        if self._el is None: return self
+        s = self._el.style; s.position = 'absolute'
+        if 'x' in kw: s.left = str(kw['x']) + 'px'
+        if 'y' in kw: s.top = str(kw['y']) + 'px'
+        if 'width' in kw: s.width = str(kw['width']) + 'px'
+        if 'height' in kw: s.height = str(kw['height']) + 'px'
+        return self
+    place_configure = place
+    def pack_propagate(self, flag=True): pass
+    def grid_propagate(self, flag=True): pass
+    def pack_forget(self): self.destroy()
+    def grid_forget(self): self.destroy()
+    def place_forget(self): self.destroy()
+    def pack_info(self): return {}
+    def grid_info(self): return {}
+    def add(self, child, **kw):
+        try: child._mount()
+        except: pass
+        self._widgets.append(child); return child
+    def add_tab(self, child, text=None, **kw): return self.add(child, **kw)
+    def tab(self, *a, **kw): return ''
+    def select(self, tab_id=None): return None
+    def forget(self, tab_id=None):
+        try: tab_id.destroy()
+        except: pass
+    def index(self, tab_id): return 0
+    def tabs(self): return ()
+    def enable_traversal(self): pass
+    def bind(self, event, func, add='+'):
+        try:
+            self._mount()
+            e_str = str(event).lower().replace('<','').replace('>','').strip()
+            if e_str in ('return','kp_enter'):
+                def wrapper(js_ev):
+                    if str(js_ev.key) in ('Enter','NumpadEnter'):
+                        e = _Event(js_ev, self)
+                        try: func(e)
+                        except Exception as ex: pass
+                proxy = create_proxy(wrapper)
+                self._el.addEventListener('keydown', proxy)
+            else:
+                ev = self._translate_event(event)
+                proxy = create_proxy(self._wrap_event(func))
+                self._el.addEventListener(ev, proxy)
+            self._proxies.append(proxy)
+        except Exception as e:
+            print('[tk] bind error:', e, file=sys.stderr)
+        return self
+    def unbind(self, event, funcid=None): pass
+    bind_all = bind
+    bind_class = bind
+    def _translate_event(self, event):
+        e = str(event).lower().replace('<','').replace('>','').strip()
+        if e in ('button-1','buttonpress-1','1'): return 'click'
+        if e in ('buttonrelease-1','buttonrelease'): return 'mouseup'
+        if e in ('double-button-1','double-1'): return 'dblclick'
+        if e in ('button-3','button-2','buttonpress-3'): return 'contextmenu'
+        if e == 'keyrelease': return 'keyup'
+        if e == 'motion': return 'mousemove'
+        if e == 'enter': return 'mouseenter'
+        if e == 'leave': return 'mouseleave'
+        if e == 'focusin': return 'focus'
+        if e == 'focusout': return 'blur'
+        if e == 'configure': return 'resize'
+        if e in ('key','keypress'): return 'keydown'
+        return 'click'
+    def _wrap_event(self, func):
+        def handler(js_ev):
+            ev = _Event(js_ev, self)
+            try: func(ev)
+            except Exception as ex: pass
+        return handler
+    def destroy(self):
+        try:
+            if self._el is not None and self._el.parentNode is not None:
+                self._el.parentNode.removeChild(self._el)
+        except: pass
+        self._created = False
+        if self._id in _TKBase._all: del _TKBase._all[self._id]
+    def focus_set(self):
+        try: self._el.focus()
+        except: pass
+    focus = focus_set
+    def focus_force(self):
+        try: self._el.focus()
+        except: pass
+    def focus_get(self): return None
+    def grab_set(self): pass
+    def grab_release(self): pass
+    def winfo_width(self):
+        try: return int(self._el.offsetWidth)
+        except: return 200
+    def winfo_height(self):
+        try: return int(self._el.offsetHeight)
+        except: return 100
+    def winfo_reqwidth(self): return self.winfo_width()
+    def winfo_reqheight(self): return self.winfo_height()
+    def winfo_screenwidth(self): return int(js.window.innerWidth)
+    def winfo_screenheight(self): return int(js.window.innerHeight)
+    def winfo_x(self):
+        try: return int(self._el.offsetLeft)
+        except: return 0
+    def winfo_y(self):
+        try: return int(self._el.offsetTop)
+        except: return 0
+    def winfo_rootx(self): return self.winfo_x()
+    def winfo_rooty(self): return self.winfo_y()
+    def winfo_exists(self): return 1 if self._created else 0
+    def winfo_children(self): return list(self._widgets)
+    def winfo_toplevel(self):
+        w = self
+        while w.master is not None: w = w.master
+        return w
+    def winfo_ismapped(self): return 1 if self._created else 0
+    def winfo_viewable(self): return 1 if self._created else 0
+    def winfo_class(self): return 'Widget'
+    def winfo_name(self): return self._id
+    def update(self): pass
+    def update_idletasks(self): pass
+    def wait_visibility(self): pass
+    def wait_window(self, w=None): pass
+    def after(self, ms, func=None, *args):
+        if func is None: return None
+        try:
+            proxy = create_proxy(lambda: func(*args) if args else func())
+            self._proxies.append(proxy)
+            js.setTimeout(proxy, int(ms))
+        except: pass
+        return None
+    def after_idle(self, func, *args): return self.after(0, func, *args)
+    def after_cancel(self, id): pass
+    def _content_dom(self): return self._el
+    def register(self, func): return func
+    def bell(self):
+        try: js.playBeep(800, 100)
+        except: pass
+    def clipboard_get(self, **kw):
+        try: return js.window._tkClipboard or ''
+        except: return ''
+    def clipboard_append(self, s, **kw):
+        try:
+            js.window._tkClipboard = str(s)
+            js.navigator.clipboard.writeText(str(s))
+        except: pass
+    def clipboard_clear(self, **kw):
+        try: js.window._tkClipboard = ''
+        except: pass
+    def selection_get(self, **kw): return ''
+    def selection_clear(self, **kw): pass
+    def selection_own(self, **kw): return 0
+    def selection_own_get(self): return self
+    def selection_handle(self, *a): pass
+
+class _Event:
+    _KEYMAP = {
+        'Enter':'Return', 'Escape':'Escape', 'Backspace':'BackSpace', 'Tab':'Tab',
+        ' ':'space', 'ArrowUp':'Up', 'ArrowDown':'Down', 'ArrowLeft':'Left', 'ArrowRight':'Right',
+        'Delete':'Delete', 'Home':'Home', 'End':'End', 'PageUp':'Prior', 'PageDown':'Next',
+        'Shift':'Shift_L', 'Control':'Control_L', 'Alt':'Alt_L', 'Meta':'Meta_L',
+        'CapsLock':'Caps_Lock', 'Insert':'Insert',
+        'F1':'F1','F2':'F2','F3':'F3','F4':'F4','F5':'F5','F6':'F6',
+        'F7':'F7','F8':'F8','F9':'F9','F10':'F10','F11':'F11','F12':'F12',
+    }
+    def __init__(self, js_ev, widget):
+        self._js = js_ev; self.widget = widget
+        for attr, jsattr in [('x','offsetX'),('y','offsetY'),('x_root','clientX'),('y_root','clientY'),
+                             ('keycode','keyCode'),('num','button'),('delta','deltaY')]:
+            try: setattr(self, attr, int(getattr(js_ev, jsattr)))
+            except: setattr(self, attr, 0)
+        try: js_key = str(js_ev.key)
+        except: js_key = ''
+        self.keysym = self._KEYMAP.get(js_key, js_key)
+        self.char = js_key if len(js_key) == 1 else ''
+        try: self.state = str(js_ev.type)
+        except: self.state = ''
+        try: self.width = int(js_ev.target.offsetWidth)
+        except: self.width = 0
+        try: self.height = int(js_ev.target.offsetHeight)
+        except: self.height = 0
+
+class Variable:
+    def __init__(self, master=None, value=None, name=None):
+        self._v = value; self._traces = []
+    def get(self): return self._v
+    def set(self, v):
+        self._v = v
+        for fn, m in list(self._traces):
+            try: fn()
+            except: pass
+    def trace_add(self, mode, callback): self._traces.append((callback, mode)); return 't'
+    def trace(self, mode, callback): self._traces.append((callback, mode)); return 't'
+    def trace_remove(self, *a): pass
+    def trace_variable(self, mode, callback): self._traces.append((callback, mode)); return 't'
+    def trace_vdelete(self, *a): pass
+class StringVar(Variable):
+    def get(self): return '' if self._v is None else str(self._v)
+    def set(self, v): super().set('' if v is None else str(v))
+class IntVar(Variable):
+    def get(self):
+        try: return int(self._v) if self._v is not None else 0
+        except: return 0
+    def set(self, v):
+        try: super().set(int(v))
+        except: super().set(0)
+class DoubleVar(Variable):
+    def get(self):
+        try: return float(self._v) if self._v is not None else 0.0
+        except: return 0.0
+    def set(self, v):
+        try: super().set(float(v))
+        except: super().set(0.0)
+class BooleanVar(Variable):
+    def get(self): return bool(self._v)
+    def set(self, v): super().set(bool(v))
+
+class Tk(_TKBase):
+    def __init__(self, screenName=None, baseName=None, className='Tk', useTk=True, sync=False, use=None, **kw):
+        super().__init__(master=None, **kw)
+        self._id = 'tkwin_%d' % _TKBase._idc[0]
+        self._title_text = 'tk'; self._width = 500; self._height = 400
+        self._protocols = {}; self._menu = None
+        self._build_dom()
+        self._apply_kw(kw)
+    def _build_dom(self):
+        root = js.document.getElementById('tkroot')
+        win = js.document.createElement('div')
+        win.className = 'tk-window'; win.id = self._id
+        win.style.width = str(self._width) + 'px'
+        win.style.height = str(self._height) + 'px'
+        win.style.left = str(max(50, int((js.window.innerWidth - self._width) / 2))) + 'px'
+        win.style.top = str(max(50, int((js.window.innerHeight - self._height) / 2))) + 'px'
+        tb = js.document.createElement('div'); tb.className = 'tk-titlebar'
+        tt = js.document.createElement('span'); tt.className = 'tk-title'; tt.textContent = 'tk'
+        cb = js.document.createElement('button'); cb.className = 'tk-close'; cb.textContent = '✕'
+        tb.appendChild(tt); tb.appendChild(cb)
+        content = js.document.createElement('div'); content.className = 'tk-content'
+        win.appendChild(tb); win.appendChild(content); root.appendChild(win)
+        self._el = win; self._content = content; self._title_el = tt; self._created = True
+        self._make_draggable(win, tb)
+        cp = create_proxy(lambda ev: self._on_close()); self._proxies.append(cp)
+        cb.addEventListener('click', cp)
+    def _make_draggable(self, win, handle):
+        state = {'d': False, 'ox': 0, 'oy': 0}
+        def dn(ev):
+            state['d'] = True
+            state['ox'] = int(ev.clientX) - int(win.offsetLeft)
+            state['oy'] = int(ev.clientY) - int(win.offsetTop)
+            ev.preventDefault()
+        def mv(ev):
+            if not state['d']: return
+            win.style.left = str(int(ev.clientX) - state['ox']) + 'px'
+            win.style.top = str(int(ev.clientY) - state['oy']) + 'px'
+        def up(ev): state['d'] = False
+        p1 = create_proxy(dn); p2 = create_proxy(mv); p3 = create_proxy(up)
+        self._proxies.extend([p1,p2,p3])
+        handle.addEventListener('mousedown', p1)
+        js.document.addEventListener('mousemove', p2)
+        js.document.addEventListener('mouseup', p3)
+    def _on_close(self):
+        try:
+            if 'WM_DELETE_WINDOW' in self._protocols: self._protocols['WM_DELETE_WINDOW']()
+            else: self.destroy()
+        except: pass
+    def _content_dom(self): return self._content
+    def title(self, text=None):
+        if text is None: return self._title_text
+        self._title_text = str(text)
+        if self._title_el is not None: self._title_el.textContent = str(text)
+    def geometry(self, spec=None):
+        if spec is None: return '%dx%d+0+0' % (self._width, self._height)
+        s = str(spec)
+        if '+' in s:
+            dims, rest = s.split('+', 1)
+            if 'x' in dims:
+                w, h = dims.split('x')
+                self._width, self._height = int(w), int(h)
+                self._el.style.width = w + 'px'; self._el.style.height = h + 'px'
+            coords = rest.split('+')
+            if len(coords) >= 2:
+                self._el.style.left = coords[0] + 'px'; self._el.style.top = coords[1] + 'px'
+        elif 'x' in s:
+            w, h = s.split('x')
+            self._width, self._height = int(w), int(h)
+            self._el.style.width = w + 'px'; self._el.style.height = h + 'px'
+    def resizable(self, w=None, h=None): pass
+    def minsize(self, w=None, h=None): pass
+    def maxsize(self, w=None, h=None): pass
+    def state(self, s=None): return 'normal'
+    def iconify(self):
+        try: self._el.style.display = 'none'
+        except: pass
+    def deiconify(self):
+        try: self._el.style.display = 'flex'
+        except: pass
+    def withdraw(self): self.iconify()
+    def attributes(self, *a, **kw): pass
+    def wm_attributes(self, *a, **kw): pass
+    def protocol(self, name, func=None):
+        if func is not None: self._protocols[name] = func
+    def wm_protocol(self, name, func=None): self.protocol(name, func)
+    def wm_title(self, t=None): return self.title(t)
+    def wm_geometry(self, spec=None): return self.geometry(spec)
+    def wm_state(self, s=None): return 'normal'
+    def wm_transient(self, master=None): pass
+    def transient(self, master=None): pass
+    def wm_minsize(self, *a): pass
+    def wm_maxsize(self, *a): pass
+    def wm_resizable(self, *a): pass
+    def wm_withdraw(self): self.withdraw()
+    def wm_deiconify(self): self.deiconify()
+    def wm_overrideredirect(self, flag=None): return 0
+    def wm_group(self, *a): pass
+    def wm_command(self, *a): pass
+    def wm_client(self, *a): pass
+    def wm_frame(self): return '0x0'
+    def wm_grid(self, *a): pass
+    def wm_iconbitmap(self, *a, **kw): pass
+    def wm_iconmask(self, *a): pass
+    def wm_iconphoto(self, *a, **kw): pass
+    def wm_iconposition(self, *a): pass
+    def wm_iconwindow(self, *a): pass
+    def wm_manage(self, *a): pass
+    def wm_sizefrom(self, *a): pass
+    def wm_stackorder(self): return ()
+    def wm_wait_visibility(self): pass
+    def wm_aspect(self, *a): pass
+    def lift(self, aboveThis=None):
+        try: self._el.style.zIndex = '100'
+        except: pass
+    def lower(self, belowThis=None): pass
+    def tkraise(self, aboveThis=None): self.lift(aboveThis)
+    def tk_setPalette(self, *a, **kw): pass
+    def tk_bisque(self): pass
+    def iconbitmap(self, *a, **kw): pass
+    def iconphoto(self, *a, **kw): pass
+    def iconname(self, *a, **kw): pass
+    def report_callback_exception(self, *a): pass
+    def mainloop(self, n=0): pass
+    def quit(self): self.destroy()
+    def destroy(self):
+        try:
+            if self._el.parentNode is not None:
+                self._el.parentNode.removeChild(self._el)
+        except: pass
+
+class Toplevel(Tk):
+    def __init__(self, master=None, **kw):
+        super().__init__(**kw)
+        self.master = master
+
+class Frame(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('div')
+        self._el.className = 'tk-frame'; self._el.id = self._id
+        self._apply_kw(kw)
+        self._mount()
+class LabelFrame(Frame): pass
+class PanedWindow(Frame): pass
+
+class Label(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('div')
+        self._el.className = 'tk-label'; self._el.id = self._id
+        self._text_el = js.document.createElement('span')
+        self._el.appendChild(self._text_el)
+        self._text = str(kw.get('text', ''))
+        self._text_el.textContent = self._text
+        self._apply_kw(kw)
+        self._mount()
+    def config(self, **kw):
+        super().config(**kw)
+        if 'text' in kw:
+            self._text = str(kw['text']); self._text_el.textContent = self._text
+        if 'textvariable' in kw:
+            var = kw['textvariable']
+            if hasattr(var, 'get'):
+                try: self._text_el.textContent = str(var.get())
+                except: pass
+        return self
+    configure = config
+    def cget(self, k):
+        if k == 'text': return self._text
+        return super().cget(k)
+
+class Button(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('button')
+        self._el.className = 'tk-button'; self._el.id = self._id
+        self._text = str(kw.get('text', ''))
+        self._el.textContent = self._text
+        self._command = kw.get('command')
+        if self._command:
+            p = create_proxy(lambda ev: self._do_command())
+            self._proxies.append(p)
+            self._el.addEventListener('click', p)
+        self._apply_kw(kw)
+        self._mount()
+    def _do_command(self):
+        try:
+            if callable(self._command): self._command()
+        except Exception as e: print('[tk] command error:', e, file=sys.stderr)
+    def invoke(self): self._do_command()
+    def config(self, **kw):
+        super().config(**kw)
+        if 'text' in kw:
+            self._text = str(kw['text']); self._el.textContent = self._text
+        if 'command' in kw: self._command = kw['command']
+        if 'state' in kw: self._el.disabled = (kw['state'] == 'disabled')
+        return self
+    configure = config
+    def cget(self, k):
+        if k == 'text': return self._text
+        return super().cget(k)
+class Checkbutton(Button): pass
+class Radiobutton(Button): pass
+class Menubutton(Button): pass
+
+class Entry(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('input')
+        self._el.className = 'tk-entry'; self._el.id = self._id
+        self._el.type = 'text'
+        self._var = kw.get('textvariable')
+        if kw.get('show'): self._el.type = 'password'
+        if kw.get('state') == 'readonly': self._el.readOnly = True
+        if kw.get('state') == 'disabled': self._el.disabled = True
+        if self._var is not None:
+            try: self._el.value = str(self._var.get())
+            except: pass
+            def on_input(ev):
+                try: self._var.set(self._el.value)
+                except: pass
+            p2 = create_proxy(on_input)
+            self._proxies.append(p2)
+            self._el.addEventListener('input', p2)
+        self._apply_kw(kw)
+        self._mount()
+    def insert(self, index, text):
+        s = str(text)
+        try:
+            if index == 0 or index == 'end':
+                self._el.value += s
+            else:
+                i = int(index)
+                self._el.value = self._el.value[:i] + s + self._el.value[i:]
+        except: self._el.value += s
+        if self._var is not None:
+            try: self._var.set(self._el.value)
+            except: pass
+    def delete(self, first, last=None):
+        try:
+            if first == 0 and (last == 'end' or last is None): self._el.value = ''
+            elif last is None: self._el.value = self._el.value[:int(first)]
+            else: self._el.value = self._el.value[:int(first)] + self._el.value[int(last)+1:]
+        except: pass
+        if self._var is not None:
+            try: self._var.set(self._el.value)
+            except: pass
+    def get(self): return str(self._el.value)
+    def select_range(self, start, end=None):
+        try:
+            if end is None: self._el.setSelectionRange(int(start), int(start))
+            else: self._el.setSelectionRange(int(start), int(end))
+        except: pass
+    def selection_range(self, start, end=None): self.select_range(start, end)
+    def select_present(self):
+        try: return self._el.selectionStart != self._el.selectionEnd
+        except: return False
+    def selection_present(self): return self.select_present()
+    def select_clear(self):
+        try: self._el.setSelectionRange(0, 0)
+        except: pass
+    def select_to(self, index):
+        try: self._el.setSelectionRange(self._el.selectionStart, int(index))
+        except: pass
+    def selection_get(self):
+        try: return self._el.value[self._el.selectionStart:self._el.selectionEnd]
+        except: return ''
+    def icursor(self, i):
+        try: self._el.setSelectionRange(int(i), int(i))
+        except: pass
+    def index(self, i):
+        try: return int(self._el.selectionStart)
+        except: return 0
+    def xview(self, *a): pass
+    def xview_scroll(self, *a): pass
+    def xview_moveto(self, *a): pass
+    def clipboard_get(self): return str(self._el.value)
+    def clipboard_clear(self): pass
+    def clipboard_append(self, s): pass
+    def paste(self, event=None): pass
+    def copy(self, event=None): pass
+    def cut(self, event=None): pass
+    def config(self, **kw):
+        super().config(**kw)
+        if 'state' in kw:
+            self._el.disabled = (kw['state'] == 'disabled')
+            self._el.readOnly = (kw['state'] == 'readonly')
+        return self
+    configure = config
+class Spinbox(Entry): pass
+
+class Text(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('textarea')
+        self._el.className = 'tk-text'; self._el.id = self._id
+        self._tags = {}
+        self._marks = {'insert': '1.0', 'current': '1.0'}
+        self._apply_kw(kw)
+        self._mount()
+        def on_input(ev):
+            try:
+                pos = self._el.selectionStart
+                v = self._el.value
+                before = v[:pos]
+                line = before.count('\n') + 1
+                col = pos - before.rfind('\n') - 1
+                self._marks['insert'] = '%d.%d' % (line, col)
+            except: pass
+        p = create_proxy(on_input); self._proxies.append(p)
+        self._el.addEventListener('input', p)
+        self._el.addEventListener('click', p)
+        self._el.addEventListener('keyup', p)
+    def _resolve_index(self, i):
+        s = str(i).strip().lower()
+        v = str(self._el.value)
+        lines = v.split('\n')
+        if s in ('insert', 'tk.insert'):
+            m = self._marks.get('insert', '1.0')
+            try:
+                l, c = m.split('.'); return int(l), int(c)
+            except: return 1, 0
+        if s in ('current', 'tk.current', 'anchor', 'tk.anchor'):
+            try:
+                pos = self._el.selectionStart
+                before = v[:pos]
+                l = before.count('\n') + 1
+                c = pos - before.rfind('\n') - 1
+                return l, c
+            except: return 1, 0
+        if s in ('end', 'tk.end'):
+            return len(lines), len(lines[-1])
+        if s in ('sel.first', 'tk.sel.first', 'sel.last', 'tk.sel.last'):
+            return 1, 0
+        if '.' in s:
+            try:
+                l, c = s.split('.', 1)
+                li = int(l)
+                if c == 'end': return li, len(lines[li-1]) if li <= len(lines) else 0
+                return li, int(c)
+            except: return 1, 0
+        try: return int(s), 0
+        except: return 1, 0
+    def index(self, i):
+        l, c = self._resolve_index(i)
+        return '%d.%d' % (l, c)
+    def _to_absolute(self, l, c):
+        v = str(self._el.value)
+        lines = v.split('\n')
+        if l < 1: l = 1
+        if l > len(lines): l = len(lines)
+        off = sum(len(lines[k]) + 1 for k in range(l - 1))
+        if c > len(lines[l-1]): c = len(lines[l-1])
+        return off + c
+    def insert(self, index, text, *tags):
+        s = str(text)
+        l, c = self._resolve_index(index)
+        v = str(self._el.value)
+        try:
+            abs_pos = self._to_absolute(l, c)
+            self._el.value = v[:abs_pos] + s + v[abs_pos:]
+            self._el.selectionStart = self._el.selectionEnd = abs_pos + len(s)
+            self._marks['insert'] = self.index('insert')
+        except:
+            self._el.value = v + s
+    def delete(self, first, last=None):
+        v = str(self._el.value)
+        try:
+            l1, c1 = self._resolve_index(first)
+            a = self._to_absolute(l1, c1)
+            if last is None: b = a + 1
+            else:
+                l2, c2 = self._resolve_index(last)
+                b = self._to_absolute(l2, c2)
+            if b < a: a, b = b, a
+            self._el.value = v[:a] + v[b:]
+        except: pass
+    def get(self, first='1.0', last=None):
+        try:
+            v = str(self._el.value)
+            l1, c1 = self._resolve_index(first)
+            a = self._to_absolute(l1, c1)
+            if last is None: return v[a:]
+            l2, c2 = self._resolve_index(last)
+            b = self._to_absolute(l2, c2)
+            return v[a:b]
+        except: return ''
+    def see(self, index):
+        try:
+            l, c = self._resolve_index(index)
+            v = str(self._el.value)
+            lines = v.split('\n')
+            lines_before = sum(len(lines[k]) + 1 for k in range(l - 1))
+            self._el.scrollTop = lines_before * 16
+        except: pass
+    def mark_set(self, name, index):
+        l, c = self._resolve_index(index)
+        self._marks[str(name)] = '%d.%d' % (l, c)
+    def mark_unset(self, *names):
+        for n in names: self._marks.pop(n, None)
+    def mark_gravity(self, name, g=None): pass
+    def mark_names(self): return tuple(self._marks.keys())
+    def mark_next(self, index): return None
+    def mark_previous(self, index): return None
+    def yview(self, *a): pass
+    def xview(self, *a): pass
+    def yview_scroll(self, *a): pass
+    def xview_scroll(self, *a): pass
+    def yview_moveto(self, *a): pass
+    def xview_moveto(self, *a): pass
+    def tag_add(self, tag, *args): self._tags.setdefault(tag, [])
+    def tag_remove(self, tag, *args): pass
+    def tag_config(self, *a, **kw): pass
+    def tag_configure(self, *a, **kw): pass
+    def tag_cget(self, *a): return ''
+    def tag_bind(self, *a, **kw): pass
+    def tag_delete(self, *a):
+        for t in a: self._tags.pop(t, None)
+    def tag_names(self, *a): return tuple(self._tags.keys())
+    def tag_ranges(self, *a): return ()
+    def tag_nextrange(self, *a): return ()
+    def tag_prevrange(self, *a): return ()
+    def bbox(self, *a): return (0, 0, 0, 0)
+    def edit_undo(self): pass
+    def edit_redo(self): pass
+    def edit_separator(self): pass
+    def edit_reset(self): pass
+    def edit_modified(self, *a): return 0
+    def compare(self, *a): return True
+    def count(self, *a): return (0,)
+    def search(self, *a, **kw): return ''
+    def dump(self, *a, **kw): return []
+    def image_create(self, *a, **kw): return ''
+    def window_create(self, *a, **kw): return ''
+    def window_names(self): return ()
+    def config(self, **kw):
+        super().config(**kw); return self
+    configure = config
+    def focus(self):
+        try: self._el.focus()
+        except: pass
+
+class Canvas(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        w = int(kw.get('width', 200)); h = int(kw.get('height', 200))
+        self._el = js.document.createElement('canvas')
+        self._el.className = 'tk-canvas'; self._el.id = self._id
+        self._el.width = w; self._el.height = h
+        self._el.style.width = str(w) + 'px'
+        self._el.style.height = str(h) + 'px'
+        self._ctx = self._el.getContext('2d')
+        self._items = {}; self._next_id = 1
+        self._apply_kw(kw)
+        self._mount()
+    def _add(self):
+        i = self._next_id; self._next_id += 1; return i
+    def _color(self, c):
+        if c is None or c == '': return None
+        return str(c)
+    def create_text(self, x, y, **kw):
+        i = self._add()
+        try:
+            self._ctx.fillStyle = self._color(kw.get('fill','black')) or '#000'
+            f = kw.get('font', ('Segoe UI', 12))
+            if isinstance(f, (tuple, list)):
+                fam = str(f[0]); size = str(f[1]) if len(f) > 1 else '12'
+                if size.isdigit(): size += 'px'
+                style = 'bold' if len(f) > 2 and 'bold' in str(f[2]).lower() else ''
+                self._ctx.font = (style + ' ' + size + ' ' + fam).strip()
+            else: self._ctx.font = str(f)
+            self._ctx.fillText(str(kw.get('text','')), int(x), int(y))
+        except: pass
+        return i
+    def create_rectangle(self, x1, y1, x2, y2, **kw):
+        i = self._add()
+        try:
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            fill = self._color(kw.get('fill')); outline = self._color(kw.get('outline'))
+            w = x2 - x1; h = y2 - y1
+            if fill: self._ctx.fillStyle = fill; self._ctx.fillRect(x1, y1, w, h)
+            if outline:
+                self._ctx.strokeStyle = outline; self._ctx.lineWidth = int(kw.get('width', 1))
+                self._ctx.strokeRect(x1, y1, w, h)
+        except: pass
+        return i
+    def create_oval(self, x1, y1, x2, y2, **kw):
+        i = self._add()
+        try:
+            x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+            self._ctx.beginPath()
+            self._ctx.ellipse((x1+x2)/2, (y1+y2)/2, abs(x2-x1)/2, abs(y2-y1)/2, 0, 0, 6.283185)
+            fill = self._color(kw.get('fill')); outline = self._color(kw.get('outline'))
+            if fill: self._ctx.fillStyle = fill; self._ctx.fill()
+            if outline:
+                self._ctx.strokeStyle = outline; self._ctx.lineWidth = int(kw.get('width', 1))
+                self._ctx.stroke()
+        except: pass
+        return i
+    def create_arc(self, x1, y1, x2, y2, **kw):
+        i = self._add()
+        try:
+            x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+            cx = (x1 + x2) / 2; cy = (y1 + y2) / 2
+            r = min(abs(x2-x1)/2, abs(y2-y1)/2)
+            start_deg = float(kw.get('start', 0))
+            extent_deg = float(kw.get('extent', 90))
+            a0 = math.radians(-start_deg)
+            a1 = math.radians(-(start_deg + extent_deg))
+            style = str(kw.get('style', 'pieslice')).lower()
+            outline = self._color(kw.get('outline'))
+            fill = self._color(kw.get('fill'))
+            lw = int(kw.get('width', 1))
+            self._ctx.beginPath()
+            self._ctx.arc(cx, cy, r, a0, a1, extent_deg >= 0)
+            if style == 'arc':
+                if outline:
+                    self._ctx.strokeStyle = outline; self._ctx.lineWidth = lw; self._ctx.stroke()
+            elif style == 'chord':
+                self._ctx.closePath()
+                if fill: self._ctx.fillStyle = fill; self._ctx.fill()
+                if outline:
+                    self._ctx.strokeStyle = outline; self._ctx.lineWidth = lw; self._ctx.stroke()
+            else:
+                self._ctx.lineTo(cx, cy); self._ctx.closePath()
+                if fill: self._ctx.fillStyle = fill; self._ctx.fill()
+                if outline:
+                    self._ctx.strokeStyle = outline; self._ctx.lineWidth = lw; self._ctx.stroke()
+        except: pass
+        return i
+    def create_line(self, *coords, **kw):
+        i = self._add()
+        try:
+            if len(coords) < 4: return i
+            self._ctx.beginPath()
+            self._ctx.moveTo(int(coords[0]), int(coords[1]))
+            for j in range(2, len(coords), 2):
+                self._ctx.lineTo(int(coords[j]), int(coords[j+1]))
+            self._ctx.strokeStyle = self._color(kw.get('fill','#000')) or '#000'
+            self._ctx.lineWidth = int(kw.get('width', 1))
+            self._ctx.stroke()
+        except: pass
+        return i
+    def create_polygon(self, *coords, **kw):
+        i = self._add()
+        try:
+            if len(coords) < 4: return i
+            self._ctx.beginPath()
+            self._ctx.moveTo(int(coords[0]), int(coords[1]))
+            for j in range(2, len(coords), 2):
+                self._ctx.lineTo(int(coords[j]), int(coords[j+1]))
+            self._ctx.closePath()
+            fill = self._color(kw.get('fill')); outline = self._color(kw.get('outline'))
+            if fill: self._ctx.fillStyle = fill; self._ctx.fill()
+            if outline:
+                self._ctx.strokeStyle = outline; self._ctx.lineWidth = int(kw.get('width', 1))
+                self._ctx.stroke()
+        except: pass
+        return i
+    def create_image(self, x, y, **kw):
+        i = self._add()
+        img = kw.get('image')
+        if not img: return i
+        data = None
+        if hasattr(img, '_data'): data = img._data
+        elif hasattr(img, 'data'): data = img.data
+        elif isinstance(img, str):
+            try: data = open(img, 'rb').read()
+            except: pass
+        if data:
+            b64 = base64.b64encode(data).decode('ascii')
+            js_img = js.Image.new()
+            def onload(ev):
+                try:
+                    self._ctx.save()
+                    self._ctx.translate(float(x), float(y))
+                    angle = float(kw.get('angle', 0))
+                    self._ctx.rotate(math.radians(-angle))
+                    dw = js_img.width; dh = js_img.height
+                    anchor = str(kw.get('anchor', 'center'))
+                    ax = -dw/2; ay = -dh/2
+                    if 'w' in anchor: ax = 0
+                    elif 'e' in anchor: ax = -dw
+                    if 'n' in anchor: ay = 0
+                    elif 's' in anchor: ay = -dh
+                    self._ctx.drawImage(js_img, ax, ay)
+                    self._ctx.restore()
+                except: pass
+            js_img.onload = create_proxy(onload)
+            js_img.src = "data:image/png;base64," + b64
+        return i
+    def create_bitmap(self, *a, **kw): return self._add()
+    def create_window(self, *a, **kw): return self._add()
+    def rotate(self, tagOrId, xOrigin, yOrigin, angle): pass
+    def delete(self, *args):
+        if not args:
+            try: self._ctx.clearRect(0, 0, self._el.width, self._el.height)
+            except: pass
+    def itemconfig(self, *a, **kw): pass
+    def itemconfigure(self, *a, **kw): pass
+    def itemcget(self, *a, **kw): return ''
+    def coords(self, *a): return ()
+    def bbox(self, *a): return None
+    def move(self, *a): pass
+    def tag_raise(self, *a): pass
+    def tag_lower(self, *a): pass
+    def tag_bind(self, *a, **kw): pass
+    def yview(self, *a): pass
+    def xview(self, *a): pass
+    def find_all(self): return tuple(self._items.keys())
+    def find_withtag(self, t): return self.find_all()
+    def find_overlapping(self, *a): return ()
+    def find_closest(self, *a): return ()
+    def postscript(self, *a, **kw): return ''
+    def scale(self, *a): pass
+    def dchars(self, *a): pass
+    def focus(self, *a): pass
+    def type(self, *a): return 'arc'
+    def config(self, **kw):
+        super().config(**kw)
+        if 'width' in kw:
+            self._el.width = int(kw['width']); self._el.style.width = str(int(kw['width'])) + 'px'
+        if 'height' in kw:
+            self._el.height = int(kw['height']); self._el.style.height = str(int(kw['height'])) + 'px'
+        return self
+    configure = config
+
+class Listbox(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('select')
+        self._el.className = 'tk-listbox'; self._el.id = self._id
+        self._el.multiple = True
+        self._el.size = int(kw.get('height', 5))
+        self._apply_kw(kw)
+        self._mount()
+    def insert(self, index, *items):
+        for it in items:
+            o = js.document.createElement('option'); o.textContent = str(it)
+            self._el.appendChild(o)
+    def delete(self, first, last=None):
+        try:
+            if first == 0 and last == 'end': self._el.innerHTML = ''
+        except: pass
+    def get(self, first, last=None):
+        try: return str(self._el.options[int(first)].text)
+        except: return ''
+    def curselection(self):
+        r = []
+        for i in range(self._el.options.length):
+            if self._el.options[i].selected: r.append(i)
+        return tuple(r)
+    def size(self): return self._el.options.length
+    def see(self, i): pass
+    def activate(self, i): pass
+    def selection_set(self, i):
+        try: self._el.options[int(i)].selected = True
+        except: pass
+    def selection_clear(self, *a): pass
+    def selection_includes(self, i):
+        try: return bool(self._el.options[int(i)].selected)
+        except: return False
+
+class Scrollbar(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('div')
+        self._el.className = 'tk-scrollbar'; self._el.id = self._id
+        self._mount()
+    def set(self, *a): pass
+    def get(self): return (0.0, 1.0)
+    def activate(self, *a): pass
+
+class Scale(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('input')
+        self._el.type = 'range'; self._el.className = 'tk-entry'; self._el.id = self._id
+        if 'from_' in kw: self._el.min = str(kw['from_'])
+        elif 'from' in kw: self._el.min = str(kw['from'])
+        if 'to' in kw: self._el.max = str(kw['to'])
+        if kw.get('orient') == 'vertical': self._el.style.writingMode = 'vertical-lr'
+        self._apply_kw(kw)
+        self._mount()
+    def get(self): return float(self._el.value)
+    def set(self, v): self._el.value = str(v)
+    def config(self, **kw):
+        super().config(**kw); return self
+    configure = config
+
+class Menu(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._items = []
+    def add_command(self, **kw): self._items.append(('command', kw))
+    def add_cascade(self, **kw): self._items.append(('cascade', kw))
+    def add_separator(self, **kw): self._items.append(('separator', kw))
+    def add_checkbutton(self, **kw): self._items.append(('check', kw))
+    def add_radiobutton(self, **kw): self._items.append(('radio', kw))
+    def delete(self, *a): pass
+    def entryconfig(self, *a, **kw): pass
+    def entryconfigure(self, *a, **kw): pass
+    def index(self, i): return 'end'
+    def config(self, **kw): return self
+    configure = config
+    def invoke(self, *a): pass
+    def post(self, *a): pass
+    def unpost(self): pass
+    def tk_popup(self, *a, **kw): pass
+
+class Treeview(_TKBase):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el = js.document.createElement('div')
+        self._el.className = 'tk-frame'
+        self._el.style.background = '#fff'
+        self._el.style.border = '1px inset #888'
+        self._el.style.minHeight = '100px'
+        self._el.style.overflow = 'auto'
+        self._items_map = {}
+        self._apply_kw(kw)
+        self._mount()
+    def heading(self, *a, **kw): pass
+    def heading_configure(self, *a, **kw): pass
+    def column(self, *a, **kw): pass
+    def column_configure(self, *a, **kw): pass
+    def insert(self, parent='', index='end', **kw):
+        import uuid
+        iid = kw.get('iid') or ('item_' + str(uuid.uuid4())[:8])
+        self._items_map[iid] = kw
+        txt = kw.get('text', '')
+        row = js.document.createElement('div')
+        row.style.padding = '2px 6px'
+        row.style.borderBottom = '1px solid #eee'
+        row.textContent = str(txt)
+        self._el.appendChild(row)
+        return iid
+    def get_children(self, *a): return tuple(self._items_map.keys())
+    def delete(self, *a): 
+        try: self._el.innerHTML = ''; self._items_map.clear()
+        except: pass
+    def item(self, iid=None, **kw):
+        if iid and iid in self._items_map: return self._items_map[iid]
+        return {'text': '', 'values': ()}
+    def bind(self, *a, **kw): return None
+    def selection(self): return ()
+    def selection_set(self, *a): pass
+    def selection_remove(self, *a): pass
+    def see(self, *a): pass
+    def focus(self, *a): return ''
+    def parent(self, *a): return ''
+    def set(self, *a, **kw): pass
+    def tag_configure(self, *a, **kw): pass
+    def tag_has(self, *a): return False
+    def exists(self, *a): return 0
+    def move(self, *a, **kw): return ''
+    def detach(self, *a): pass
+    def reattach(self, *a): pass
+    def identify_row(self, *a): return ''
+    def identify_column(self, *a): return ''
+    def identify_region(self, *a): return ''
+    def identify_element(self, *a): return ''
+
+class PhotoImage:
+    def __init__(self, master=None, **kw):
+        self._data = None
+        self._file = None
+        self._w = 0; self._h = 0
+        f = kw.get('file')
+        if f:
+            self._file = f
+            try: self._data = open(f, 'rb').read()
+            except: pass
+        elif 'data' in kw:
+            try: self._data = base64.b64decode(kw['data'])
+            except: pass
+    def width(self): return self._w or 100
+    def height(self): return self._h or 100
+    def zoom(self, x, y=None): return self
+    def subsample(self, x, y=None): return self
+    def copy(self): return self
+    def get(self, x, y): return (0, 0, 0)
+    def put(self, *a, **kw): pass
+    def write(self, *a, **kw): pass
+
+# ttk
+ttk = types.ModuleType('tkinter.ttk')
+ttk.Frame = Frame
+ttk.Label = Label
+ttk.Button = Button
+ttk.Entry = Entry
+ttk.Labelframe = Frame
+ttk.Treeview = Treeview
+class _Style:
+    def configure(self, *a, **kw): pass
+    def map(self, *a, **kw): pass
+    def theme_use(self, *a): pass
+    def theme_names(self): return ('default',)
+ttk.Style = _Style
+class _Progressbar(Frame):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._el.style.height = '20px'
+        self._el.style.border = '1px solid #888'
+        self._el.style.background = '#ddd'
+        self._bar = js.document.createElement('div')
+        self._bar.style.height = '100%'
+        self._bar.style.width = '0%'
+        self._bar.style.background = '#3a6ea5'
+        self._el.appendChild(self._bar)
+        if 'value' in kw:
+            try: self._bar.style.width = str(kw['value']) + '%'
+            except: pass
+        if 'length' in kw:
+            self._el.style.width = str(kw['length']) + 'px'
+    def start(self, *a): pass
+    def stop(self): pass
+    def step(self, *a): pass
+    def config(self, **kw):
+        super().config(**kw)
+        if 'value' in kw:
+            try: self._bar.style.width = str(kw['value']) + '%'
+            except: pass
+        return self
+    configure = config
+ttk.Progressbar = _Progressbar
+
+class Notebook(Frame):
+    def __init__(self, master=None, cnf=None, **kw):
+        if cnf: kw.update(cnf)
+        super().__init__(master, **kw)
+        self._tabs = []; self._tab_names = []; self._active = 0
+        self._el.className = 'tk-frame'
+        self._tabs_bar = js.document.createElement('div')
+        self._tabs_bar.className = 'tk-notebook-tabs'
+        self._el.insertBefore(self._tabs_bar, self._el.firstChild)
+        self._panes = js.document.createElement('div')
+        self._panes.style.flex = '1'
+        self._el.appendChild(self._panes)
+    def add(self, child, text=None, **kw):
+        idx = len(self._tabs)
+        name = text if text is not None else str(kw.get('text', 'Tab%d' % (idx+1)))
+        self._tabs.append(child); self._tab_names.append(name)
+        btn = js.document.createElement('div')
+        btn.className = 'tk-notebook-tab'; btn.textContent = name
+        def on_click(ev, i=idx): self._select(i)
+        p = create_proxy(on_click); self._proxies.append(p)
+        btn.addEventListener('click', p)
+        self._tabs_bar.appendChild(btn)
+        pane = js.document.createElement('div')
+        pane.style.display = 'none'; pane.style.flexDirection = 'column'
+        self._panes.appendChild(pane)
+        def new_parent(): return pane
+        child._parent_dom = new_parent
+        try: child._mount()
+        except: pass
+        if idx == 0: self._select(0)
+        return child
+    def _select(self, i):
+        self._active = i
+        for k in range(len(self._tabs)):
+            pane = self._panes.children[k]
+            tab_btn = self._tabs_bar.children[k]
+            if k == i:
+                pane.style.display = 'flex'; tab_btn.classList.add('active')
+            else:
+                pane.style.display = 'none'; tab_btn.classList.remove('active')
+    def select(self, tab_id=None):
+        try:
+            if isinstance(tab_id, int): self._select(tab_id)
+            elif tab_id in self._tabs: self._select(self._tabs.index(tab_id))
+        except: pass
+    def forget(self, tab_id=None):
+        try:
+            if isinstance(tab_id, int):
+                self._tabs.pop(tab_id); self._tab_names.pop(tab_id)
+        except: pass
+    def index(self, tab_id):
+        try: return self._tabs.index(tab_id)
+        except: return 0
+    def tabs(self): return tuple(self._tabs)
+    def tab(self, tab_id, **kw): return ''
+    def enable_traversal(self): pass
+ttk.Notebook = Notebook
+ttk.Combobox = Entry
+ttk.Checkbutton = Button
+ttk.Radiobutton = Button
+ttk.Scrollbar = Scrollbar
+ttk.Separator = Frame
+ttk.Sizegrip = Frame
+
+# CONSTANTS
+tkinter = types.ModuleType('tkinter')
+for cls_name in ['Tk','Toplevel','Frame','Label','Button','Entry','Text','Canvas',
+                 'Listbox','Scrollbar','Menu','Menubutton','LabelFrame','PanedWindow',
+                 'Spinbox','Scale','Checkbutton','Radiobutton','PhotoImage']:
+    setattr(tkinter, cls_name, globals()[cls_name])
+for var_cls in ['StringVar','IntVar','DoubleVar','BooleanVar','Variable']:
+    setattr(tkinter, var_cls, globals()[var_cls])
+tkinter.BitmapImage = PhotoImage
+
+_consts = {
+    'LEFT':'left','RIGHT':'right','TOP':'top','BOTTOM':'bottom',
+    'X':'x','Y':'y','BOTH':'both','NONE':'none',
+    'N':'n','S':'s','E':'e','W':'w','NE':'ne','NW':'nw','SE':'se','SW':'sw',
+    'CENTER':'center','END':'end','WORD':'word','CHAR':'char',
+    'NORMAL':'normal','DISABLED':'disabled','ACTIVE':'active','HIDDEN':'hidden',
+    'SUNKEN':'sunken','RAISED':'raised','FLAT':'flat','GROOVE':'groove',
+    'RIDGE':'ridge','SOLID':'solid',
+    'TRUE':True,'FALSE':False,'YES':True,'NO':False,'ON':True,'OFF':False,
+    'ANCHOR':'anchor','ARC':'arc','BASELINE':'baseline','BEVEL':'bevel',
+    'BITMAP':'bitmap','CHARS':'chars','FIRST':'first','IMAGE':'image',
+    'LAST':'last','MITER':'miter','MOVETO':'moveto','MULTIPLE':'multiple',
+    'NUMERIC':'numeric','PAGES':'pages','PIXELS':'pixels',
+    'PROJECTING':'projecting','ROUND':'round','SCROLL':'scroll','SINGLE':'single',
+    'UNITS':'units','WIDTH':'width','WRITABLE':'writable',
+    'INSERT':'insert','SEL':'sel','SEL_FIRST':'sel.first','SEL_LAST':'sel.last',
+    'CURRENT':'current',
+    'XTERM':'xterm','HAND2':'hand2','CROSSHAIR':'crosshair','WATCH':'watch',
+    'ARROW':'arrow','PENCIL':'pencil','FLEUR':'fleur',
+    'ABORT':'abort','ALL':'all','BACKSPACE':'BackSpace','BREAK':'Break',
+    'CANCEL':'Cancel','DELETE':'Delete','DOWN':'Down','ESCAPE':'Escape',
+    'HOME':'Home','NEXT':'Next','PAUSE':'Pause','PRIOR':'Prior',
+    'PRINT':'Print','RETURN':'Return','TAB':'Tab','UP':'Up',
+    'PIESLICE':'pieslice','CHORD':'chord',
+}
+for k, v in _consts.items():
+    setattr(tkinter, k, v)
+
+tkinter.ttk = ttk
+sys.modules['tkinter'] = tkinter
+sys.modules['tkinter.ttk'] = ttk
+sys.modules['tkinter.messagebox'] = StubModule('tkinter.messagebox')
+sys.modules['tkinter.filedialog'] = StubModule('tkinter.filedialog')
+sys.modules['tkinter.scrolledtext'] = StubModule('tkinter.scrolledtext')
+sys.modules['tkinter.font'] = StubModule('tkinter.font')
+sys.modules['tkinter.colorchooser'] = StubModule('tkinter.colorchooser')
+sys.modules['tkinter.simpledialog'] = StubModule('tkinter.simpledialog')
+sys.modules['tkinter.constants'] = StubModule('tkinter.constants')
+
+# WINSOUND
+class WinsoundModule(StubModule):
+    SND_FILENAME = 0x00020000
+    SND_ASYNC = 0x0001
+    SND_NODEFAULT = 0x0002
+    SND_LOOP = 0x0008
+    SND_PURGE = 0x0040
+    SND_MEMORY = 0x0004
+    SND_ALIAS = 0x00010000
+    MB_OK = 0
+    MB_ICONERROR = 0x10
+    MB_ICONINFORMATION = 0x40
+    MB_ICONWARNING = 0x30
+    WAVE_MAPPER = -1
+    def Beep(self, freq, dur):
+        try: js.playBeep(float(freq), int(dur))
+        except: pass
+    def PlaySound(self, sound, flags):
+        if isinstance(sound, str):
+            try:
+                data = open(sound, 'rb').read()
+                b64 = base64.b64encode(data).decode('ascii')
+                js.playWavBase64(b64)
+            except Exception as e:
+                print("[winsound] PlaySound error:", e, file=sys.stderr)
+    def MessageBeep(self, *a, **kw): pass
+
+# pygame.mixer
+class PygameMixerModule(StubModule):
+    def init(self): return None
+    def get_init(self): return (44100, -16, 2)
+    def quit(self): pass
+    def set_num_channels(self, n): pass
+    def get_num_channels(self): return 8
+    class Sound:
+        def __init__(self, path=None, *a, **kw):
+            self._path = path; self._b64 = None
+            if path:
+                try:
+                    data = open(path, 'rb').read()
+                    self._b64 = base64.b64encode(data).decode('ascii')
+                except: pass
+        def play(self, *a, **kw):
+            if self._b64:
+                try: js.playWavBase64(self._b64)
+                except: pass
+        def stop(self): pass
+        def set_volume(self, v): pass
+        def get_volume(self): return 1.0
+        def get_length(self): return 1.0
+    def music_load(self, path):
+        try:
+            data = open(path, 'rb').read()
+            self._music_b64 = base64.b64encode(data).decode('ascii')
+        except: self._music_b64 = None
+    def music_play(self, *a, **kw):
+        if getattr(self, '_music_b64', None):
+            try: js.playWavBase64(self._music_b64)
+            except: pass
+    def music_stop(self): pass
+    def music_set_volume(self, v): pass
+    def music_get_busy(self): return False
+
+# VOSK
+class VoskModel:
+    def __init__(self, model_path=None):
+        self.model_path = model_path
+    def __repr__(self): return '<VoskModel>'
+
+class VoskKaldiRecognizer:
+    def __init__(self, model, sample_rate=16000):
+        self.model = model; self.sample_rate = sample_rate
+        self._callback = None; self._listening = False
+        self._result_text = ''
+    def SetWords(self, words): pass
+    def AcceptWaveform(self, data): return False
+    def Result(self): return '{"text": "%s"}' % self._result_text
+    def PartialResult(self): return '{"partial": ""}'
+    def FinalResult(self): return '{"text": "%s"}' % self._result_text
+    def Start(self):
+        self._listening = True
+        def cb(text):
+            self._result_text = text
+            if self._callback:
+                try: self._callback(text)
+                except Exception as e: pass
+        js.startVoskRecognition(create_proxy(cb))
+    def Stop(self):
+        self._listening = False
+        try: js.stopVoskRecognition()
+        except: pass
+    def SetPartialResultCallback(self, cb): self._callback = cb
+    def SetResultCallback(self, cb): self._callback = cb
+
+# PYTTSX3
+class Pyttsx3Engine:
+    def __init__(self, *a, **kw):
+        self._rate = 200
+        self._voice = None
+        self._volume = 1.0
+    def say(self, text):
+        try: js.speakText(str(text))
+        except Exception as e: print("[pyttsx3] say error:", e, file=sys.stderr)
+    def runAndWait(self): pass
+    def setProperty(self, name, value):
+        if name == 'rate': self._rate = value
+        elif name == 'voice': self._voice = value
+        elif name == 'volume': self._volume = value
+    def getProperty(self, name):
+        if name == 'rate': return self._rate
+        if name == 'voice': return self._voice
+        if name == 'volume': return self._volume
+        if name == 'voices': return []  # важно: пустой список, не None
+        return None
+    def getPropertyList(self): return []
+    def stop(self):
+        try: js.window.speechSynthesis.cancel()
+        except: pass
+    def save_to_file(self, text, path): pass
+    def connect(self, name, cb): pass
+
+class Pyttsx3Module(StubModule):
+    def init(self, *a, **kw): return Pyttsx3Engine()
+    def Engine(self, *a, **kw): return Pyttsx3Engine()
+
+def _browser_input(prompt=""):
+    try:
+        result = js.window.prompt(str(prompt) if prompt else "Введите значение:")
+    except: raise EOFError("Input not available")
+    if result is None: raise EOFError("Input cancelled")
+    return str(result)
+builtins.input = _browser_input
+
+# StubFinder
+class StubLoader(Loader):
+    def create_module(self, spec):
+        name = spec.name
+        if name == 'winsound': m = WinsoundModule(name)
+        elif name == 'pygame.mixer': m = PygameMixerModule(name)
+        elif name == 'vosk':
+            m = types.ModuleType('vosk')
+            m.Model = VoskModel
+            m.KaldiRecognizer = VoskKaldiRecognizer
+            m.SetLogLevel = lambda x: None
+        elif name == 'pyttsx3':
+            m = Pyttsx3Module(name)
+            m.init = lambda *a, **kw: Pyttsx3Engine()
+            m.Engine = Pyttsx3Engine
+        else:
+            m = StubModule(name)
+        m.__name__ = name; m.__loader__ = self; m.__spec__ = spec
+        sys.modules[name] = m
+        return m
+    def exec_module(self, module): pass
+
+class StubFinder(MetaPathFinder):
+    _real_stdlib = {
+        'sys','builtins','__builtin__','__main__','os','io','importlib','abc','ast',
+        'codecs','collections','copy','copyreg','datetime','decimal','enum','fnmatch',
+        'functools','gc','glob','inspect','itertools','keyword','linecache','locale',
+        'logging','marshal','math','numbers','operator','pathlib','pickle','pprint',
+        'platform','queue','random','re','select','selectors','shutil','signal','site',
+        'stat','statistics','string','struct','subprocess','sysconfig','tempfile',
+        'textwrap','threading','time','traceback','types','typing','unicodedata',
+        'urllib','uuid','warnings','weakref','xml','zipfile','zoneinfo','hashlib',
+        'hmac','secrets','base64','binascii','json','csv','sqlite3','zlib','bz2',
+        'lzma','gzip','tarfile','ssl','socket','email','http','html','asyncio',
+        'concurrent','multiprocessing','ctypes','array','cmath','errno','fcntl','grp',
+        'pwd','resource','termios','tty','pty','difflib','contextvars','heapq','bisect',
+        'gettext','argparse','configparser','dataclasses','graphlib','tomllib','zipimport',
+        'tkinter',
+    }
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.startswith('_'): return None
+        if fullname in self._real_stdlib: return None
+        top = fullname.split('.')[0]
+        if top in self._real_stdlib: return None
+        if fullname in sys.modules:
+            mod = sys.modules[fullname]
+            if not isinstance(mod, StubModule): return None
+        return ModuleSpec(fullname, StubLoader())
+
+sys.modules['winsound'] = WinsoundModule('winsound')
+sys.meta_path.append(StubFinder())
+
+print("[Pyodide] tkinter + Vosk (WASM) + winsound + pygame.mixer + pyttsx3 готовы", file=sys.stderr)
+</script>
+
+</body>
+</html>
